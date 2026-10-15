@@ -11,6 +11,11 @@ export default defineConfig({
         target: 'http://localhost:8080',
         changeOrigin: true,
       },
+      '/grafana': {
+        target: 'http://localhost',
+        changeOrigin: true,
+        ws: true,
+      },
     },
   },
 })

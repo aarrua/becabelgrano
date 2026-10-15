@@ -104,10 +104,17 @@ npm install
 # Iniciar servidor de desarrollo en http://localhost:5173
 npm run dev
 ```
-> En desarrollo, las llamadas a `/api/*` se redirigen automáticamente mediante el proxy de Vite a `http://localhost:8080`.
+> **Proxies de Desarrollo (Vite)**:
+> - `/api/*` &rarr; `http://localhost:8080` (Backend Spring Boot en perfil dev).
+> - `/grafana/*` &rarr; `http://localhost` (Nginx del stack Docker Compose en `infra/`, el cual enruta a Grafana en `:3000`).
 
-### Compilación para Producción
+### Compilación y Despliegue en Producción
 ```bash
 npm run build
 ```
 Genera los archivos estáticos listos para ser servidos por **nginx** en `frontend/dist/`.
+En producción, Nginx actúa como punto de entrada único (puerto 80) exponiendo `/` (SPA React), `/api` (Backend) y `/grafana` (Grafana), por lo que las rutas relativas se resuelven de forma transparente.
+
+### Defensa Anti-Anidamiento Recursivo de Iframes
+Para prevenir bucles infinitos en caso de que una ruta no proxieada apunte a la SPA dentro de un `<iframe>`, `src/main.tsx` comprueba `window.self === window.top`. Si se detecta ejecución dentro de un frame, la aplicación aborta el montaje y no renderiza la UI.
+
