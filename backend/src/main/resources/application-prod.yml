@@ -1,0 +1,23 @@
+spring:
+  datasource:
+    url: jdbc:h2:file:./data/tanquesdb;DB_CLOSE_DELAY=-1;AUTO_SERVER=TRUE
+    driverClassName: org.h2.Driver
+    username: sa
+    password: ""
+  h2:
+    console:
+      enabled: false
+  jpa:
+    show-sql: false
+
+tanques:
+  jwt:
+    # En producción el secreto DEBE provenir de la variable de entorno JWT_SECRET (sin fallback)
+    secret: ${JWT_SECRET}
+  influx:
+    url: ${INFLUX_URL:http://localhost:8086}
+    token: ${INFLUX_TOKEN:tanques-super-secret-token-2025}
+    org: ${INFLUX_ORG:utn-frsf}
+    bucket: ${INFLUX_BUCKET:tanques}
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:}

@@ -27,9 +27,12 @@ buildNumber.properties
 .mvn/wrapper/maven-wrapper.jar
 *.class
 
-# H2 Database
+# H2 Database & Local Data
 *.mv.db
 *.trace.db
+/data/
+data/
+backend/data/
 /backend/data/
 /data/h2/
 

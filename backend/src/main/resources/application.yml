@@ -1,0 +1,36 @@
+spring:
+  application:
+    name: tanques-backend
+  profiles:
+    active: dev
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: update
+
+server:
+  port: 8080
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    tags-sorter: alpha
+    operations-sorter: method
+
+tanques:
+  jwt:
+    expiration-ms: 86400000 # 24 horas
+  geometry:
+    tank-a:
+      area-cm2: 100.0
+      height-max-cm: 40.0
+      volume-max-ml: 4000.0
+    tank-b:
+      area-cm2: 70.0
+      height-max-cm: 35.0
+      volume-max-ml: 2450.0
+  auth:
+    default-docente-password: ${DEFAULT_DOCENTE_PASSWORD:docente123}
+    default-alumno-password: ${DEFAULT_ALUMNO_PASSWORD:alumno123}
