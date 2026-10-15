@@ -31,4 +31,7 @@ tanques:
       area-cm2: 70.0
       height-max-cm: 35.0
       volume-max-ml: 2450.0
+  interlocks:
+    overflow-threshold-pct: 85.0
+
 
