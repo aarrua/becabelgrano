@@ -1,0 +1,83 @@
+name: tanques-infra
+
+services:
+  # ============================================================================
+  # InfluxDB 2.x - Base de datos de series temporales (TSDB)
+  # ============================================================================
+  influxdb:
+    image: influxdb:2.7.10-alpine
+    container_name: tanques-influxdb
+    restart: unless-stopped
+    ports:
+      - "${INFLUX_PORT:-8086}:8086"
+    environment:
+      - DOCKER_INFLUXDB_INIT_MODE=setup
+      - DOCKER_INFLUXDB_INIT_USERNAME=${INFLUX_USER:-admin}
+      - DOCKER_INFLUXDB_INIT_PASSWORD=${INFLUX_PASSWORD:-admin123456}
+      - DOCKER_INFLUXDB_INIT_ORG=${INFLUX_ORG:-utn-frsf}
+      - DOCKER_INFLUXDB_INIT_BUCKET=${INFLUX_BUCKET:-tanques}
+      - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN=${INFLUX_TOKEN:-tanques-super-secret-token-2025}
+    volumes:
+      - influxdb_data:/var/lib/influxdb2
+    networks:
+      - tanques-net
+
+  # ============================================================================
+  # Grafana OSS - Dashboards de visualización y monitoreo
+  # ============================================================================
+  grafana:
+    image: grafana/grafana-oss:11.2.0
+    container_name: tanques-grafana
+    restart: unless-stopped
+    ports:
+      - "${GRAFANA_PORT:-3000}:3000"
+    environment:
+      # Acceso anónimo Viewer (el control de acceso y RBAC real reside en Spring Boot)
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
+      - GF_AUTH_ANONYMOUS_ORG_NAME=Main Org.
+      # Habilitar embedding por iframe para el Frontend web
+      - GF_SECURITY_ALLOW_EMBEDDING=true
+      # Soporte para sub-path /grafana detrás del reverse proxy Nginx
+      - GF_SERVER_SERVE_FROM_SUB_PATH=true
+      - GF_SERVER_ROOT_URL=%(protocol)s://%(domain)s:%(http_port)s/grafana/
+      - GF_USERS_ALLOW_SIGN_UP=false
+      # Inyección de credenciales para provisioning de InfluxDB
+      - INFLUX_TOKEN=${INFLUX_TOKEN:-tanques-super-secret-token-2025}
+      - INFLUX_ORG=${INFLUX_ORG:-utn-frsf}
+      - INFLUX_BUCKET=${INFLUX_BUCKET:-tanques}
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro
+      - ./grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
+    depends_on:
+      - influxdb
+    networks:
+      - tanques-net
+
+  # ============================================================================
+  # Nginx - Único punto de entrada HTTP en Raspberry Pi
+  # ============================================================================
+  nginx:
+    image: nginx:1.26.2-alpine
+    container_name: tanques-nginx
+    restart: unless-stopped
+    ports:
+      - "${NGINX_PORT:-80}:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/html:/usr/share/nginx/html:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      - grafana
+    networks:
+      - tanques-net
+
+volumes:
+  influxdb_data:
+  grafana_data:
+
+networks:
+  tanques-net:
+    driver: bridge
