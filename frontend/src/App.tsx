@@ -5,6 +5,7 @@ import { ProtectedRoute } from './components/ProtectedRoute'
 import { Navbar } from './components/Navbar'
 import { LoginView } from './views/LoginView'
 import { MonitorView } from './views/MonitorView'
+import { AuditView } from './views/AuditView'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -44,7 +45,7 @@ export default function App() {
                   <div className="app-layout">
                     <Navbar />
                     <main className="main-content">
-                      <h2>Auditoría de Comandos</h2>
+                      <AuditView />
                     </main>
                   </div>
                 </ProtectedRoute>
