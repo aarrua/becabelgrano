@@ -17,15 +17,25 @@ public class DataInitializer implements CommandLineRunner {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
 
-    @Value("${tanques.auth.default-docente-password:docente123}")
+    @Value("${tanques.auth.default-docente-password}")
     private String defaultDocentePassword;
 
-    @Value("${tanques.auth.default-alumno-password:alumno123}")
+    @Value("${tanques.auth.default-alumno-password}")
     private String defaultAlumnoPassword;
 
     public DataInitializer(UserRepository userRepository, PasswordEncoder passwordEncoder) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
+    }
+
+    @jakarta.annotation.PostConstruct
+    public void validate() {
+        if (defaultDocentePassword == null || defaultDocentePassword.trim().isEmpty()) {
+            throw new IllegalStateException("La contraseña para 'docente' (DOCENTE_PASSWORD) no está configurada o está vacía. En producción debe definirse obligatoriamente.");
+        }
+        if (defaultAlumnoPassword == null || defaultAlumnoPassword.trim().isEmpty()) {
+            throw new IllegalStateException("La contraseña para 'alumno' (ALUMNO_PASSWORD) no está configurada o está vacía. En producción debe definirse obligatoriamente.");
+        }
     }
 
     @Override

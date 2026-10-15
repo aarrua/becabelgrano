@@ -31,6 +31,4 @@ tanques:
       area-cm2: 70.0
       height-max-cm: 35.0
       volume-max-ml: 2450.0
-  auth:
-    default-docente-password: ${DEFAULT_DOCENTE_PASSWORD:docente123}
-    default-alumno-password: ${DEFAULT_ALUMNO_PASSWORD:alumno123}
+

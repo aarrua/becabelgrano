@@ -13,3 +13,7 @@ spring:
 tanques:
   jwt:
     secret: "dev-secret-key-tanques-utn-frsf-gitda-2025-at-least-32-chars!"
+  auth:
+    default-docente-password: "docente123"
+    default-alumno-password: "alumno123"
+
