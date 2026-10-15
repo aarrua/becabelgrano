@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { fetchLatestTelemetry } from '../api/telemetry'
 import { TankVisualizer } from '../components/TankVisualizer'
+import { PumpControl } from '../components/PumpControl'
 import { GrafanaEmbed } from '../components/GrafanaEmbed'
 import { ShieldAlertIcon, CheckCircleIcon, AlertTriangleIcon } from '../components/Icons'
 
@@ -15,11 +16,7 @@ function formatUptime(ms: number): string {
   return `${seconds}s`
 }
 
-interface MonitorViewProps {
-  controlSlot?: React.ReactNode
-}
-
-export function MonitorView({ controlSlot }: MonitorViewProps) {
+export function MonitorView() {
   const refetchInterval = Number(import.meta.env.VITE_TELEMETRY_REFETCH_INTERVAL_MS) || 2000
 
   const { data: telemetry, isLoading, error } = useQuery({
@@ -49,6 +46,17 @@ export function MonitorView({ controlSlot }: MonitorViewProps) {
 
   const alarms = telemetry?.alarms ?? {}
   const hasAlarms = Boolean(alarms['overflow_a'] || alarms['overflow_b'] || alarms['sensor_fault'])
+  const pumpState = Boolean(telemetry?.actuators?.['pump'])
+  
+  const tankALevel = telemetry?.tank_a?.level_pct ?? 0
+  const tankBLevel = telemetry?.tank_b?.level_pct ?? 0
+  const isOverflow = tankALevel >= 85.0 || tankBLevel >= 85.0 || alarms['overflow_a'] || alarms['overflow_b']
+  const isInterlockBlocked = isOverflow || Boolean(alarms['sensor_fault'])
+
+  let interlockReason: string | undefined
+  if (alarms['sensor_fault']) interlockReason = 'sensor_fault'
+  else if (tankALevel >= 85.0 || alarms['overflow_a']) interlockReason = 'overflow_a'
+  else if (tankBLevel >= 85.0 || alarms['overflow_b']) interlockReason = 'overflow_b'
 
   return (
     <div className="monitor-container">
@@ -118,8 +126,12 @@ export function MonitorView({ controlSlot }: MonitorViewProps) {
         />
       )}
 
-      {/* Slot para Control de Bomba (rol DOCENTE / ALUMNO) */}
-      {controlSlot && <div className="control-slot-wrapper">{controlSlot}</div>}
+      {/* Panel de Control de Bomba (con comportamiento según rol) */}
+      <PumpControl
+        currentPumpState={pumpState}
+        isInterlockBlocked={isInterlockBlocked}
+        interlockReason={interlockReason}
+      />
 
       {/* Dashboard Grafana Embebido */}
       <GrafanaEmbed />
