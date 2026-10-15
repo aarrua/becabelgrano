@@ -35,38 +35,65 @@ function TankCylinder({ name, subtitle, telemetry, isOverflow, isAlarmActive }: 
         </div>
       </div>
 
-      <div className="cylinder-wrapper">
+      {/* Lectura digital destacada de nivel (sin superposición en la escala) */}
+      <div className="tank-level-banner">
+        <span className="level-banner-label">Nivel útil</span>
+        <div className="level-banner-digits">
+          <span className={`level-number ${isHigh ? 'text-alert' : ''}`}>
+            {level.toFixed(1)}
+          </span>
+          <span className="level-unit">%</span>
+        </div>
+      </div>
+
+      {/* Contenedor del cilindro con escala graduada lateral libre de recortes */}
+      <div className="cylinder-visualizer-container">
+        {/* Escala graduada a la izquierda (fuera del contenedor con overflow) */}
+        <div className="ruler-scale">
+          <div className="ruler-mark r-100">
+            <span className="ruler-label">100%</span>
+            <span className="ruler-tick" />
+          </div>
+          <div className="ruler-mark r-85">
+            <span className="ruler-label ruler-label-alert">85%</span>
+            <span className="ruler-tick ruler-tick-alert" />
+          </div>
+          <div className="ruler-mark r-75">
+            <span className="ruler-label">75%</span>
+            <span className="ruler-tick" />
+          </div>
+          <div className="ruler-mark r-50">
+            <span className="ruler-label">50%</span>
+            <span className="ruler-tick" />
+          </div>
+          <div className="ruler-mark r-25">
+            <span className="ruler-label">25%</span>
+            <span className="ruler-tick" />
+          </div>
+          <div className="ruler-mark r-0">
+            <span className="ruler-label">0%</span>
+            <span className="ruler-tick" />
+          </div>
+        </div>
+
+        {/* Cilindro transparente con líquido */}
         <div className="cylinder-body">
-          {/* Marcador umbral interlock 85% */}
-          <div className="interlock-threshold-line" title="Umbral de corte de interlock (85%)">
-            <span className="threshold-label">85% Interlock</span>
+          {/* Línea de umbral de interlock al 85% */}
+          <div className="interlock-threshold-line" title="Umbral de corte de interlock (85.0%)">
+            <span className="threshold-tag">Corte 85%</span>
           </div>
 
-          {/* Líquido */}
+          {/* Nivel de fluido */}
           <div
             className={`water-fill ${isHigh ? 'water-alert' : ''}`}
             style={{ height: `${level}%` }}
           >
             <div className="water-wave" />
           </div>
-
-          {/* Marcas de porcentaje */}
-          <div className="level-ticks">
-            <div className="tick-mark t-100"><span>100%</span></div>
-            <div className="tick-mark t-75"><span>75%</span></div>
-            <div className="tick-mark t-50"><span>50%</span></div>
-            <div className="tick-mark t-25"><span>25%</span></div>
-            <div className="tick-mark t-0"><span>0%</span></div>
-          </div>
-        </div>
-
-        {/* Nivel numérico central */}
-        <div className="level-display">
-          <span className="level-number">{level.toFixed(1)}</span>
-          <span className="level-unit">%</span>
         </div>
       </div>
 
+      {/* Métricas de masa y temperatura */}
       <div className="tank-metrics-grid">
         <div className="metric-box">
           <div className="metric-header">
@@ -97,33 +124,28 @@ function TankCylinder({ name, subtitle, telemetry, isOverflow, isAlarmActive }: 
 interface TankVisualizerProps {
   tankA: TankTelemetry
   tankB: TankTelemetry
-  flowLpm: number
   alarms: Record<string, boolean>
 }
 
-export function TankVisualizer({ tankA, tankB, flowLpm, alarms }: TankVisualizerProps) {
+export function TankVisualizer({ tankA, tankB, alarms }: TankVisualizerProps) {
   return (
     <div className="synoptic-section">
       <div className="tanks-layout">
         {/* Tanque A */}
         <TankCylinder
           name="Tanque A"
-          subtitle="Superior &bull; Impulsión"
+          subtitle="Superior &bull; Entrada de Impulsión"
           telemetry={tankA}
           isOverflow={Boolean(alarms['overflow_a'])}
           isAlarmActive={Boolean(alarms['overflow_a'])}
         />
 
-        {/* Acoplamiento Hidráulico Central */}
+        {/* Acoplamiento Hidráulico Central (descarga por gravedad A -> B) */}
         <div className="hydraulic-junction">
           <div className="junction-line" />
           <div className="junction-badge">
             <span className="junction-label">Descarga por Gravedad</span>
-            <div className="flow-meter">
-              <span className="flow-title">Caudal Impulsión</span>
-              <span className="flow-value">{flowLpm.toFixed(2)}</span>
-              <span className="flow-unit">L/min</span>
-            </div>
+            <span className="junction-path">Tanque A &rarr; Tanque B</span>
           </div>
           <div className="junction-line" />
         </div>
@@ -131,7 +153,7 @@ export function TankVisualizer({ tankA, tankB, flowLpm, alarms }: TankVisualizer
         {/* Tanque B */}
         <TankCylinder
           name="Tanque B"
-          subtitle="Inferior &bull; Intermedio"
+          subtitle="Inferior &bull; Salida a Reservorio"
           telemetry={tankB}
           isOverflow={Boolean(alarms['overflow_b'])}
           isAlarmActive={Boolean(alarms['overflow_b'])}

@@ -6,7 +6,7 @@
   --bg-input: #0b1120;
   --border-color: #24355a;
   --border-focus: #38bdf8;
-  
+
   --text-primary: #f8fafc;
   --text-secondary: #94a3b8;
   --text-muted: #64748b;
@@ -16,7 +16,7 @@
   --accent-emerald: #10b981;
   --accent-amber: #f59e0b;
   --accent-rose: #f43f5e;
-  
+
   --tank-water: #0284c7;
   --tank-water-surface: #38bdf8;
   --tank-bg: #070d18;
@@ -65,6 +65,22 @@ button {
 
 input, select, textarea {
   font-family: inherit;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: var(--bg-primary);
+}
+::-webkit-scrollbar-thumb {
+  background: #24355a;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #334e7a;
 }
 
 /* App container */
@@ -451,7 +467,7 @@ input, select, textarea {
   margin-bottom: 1.5rem;
 }
 
-/* Synoptic Tanks View */
+/* Synoptic Section */
 .synoptic-section {
   background-color: var(--bg-secondary);
   border: 1px solid var(--border-color);
@@ -485,11 +501,11 @@ input, select, textarea {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  margin-bottom: 1rem;
+  margin-bottom: 0.75rem;
 }
 
 .tank-name {
-  font-size: 1.1rem;
+  font-size: 1.15rem;
   font-weight: 700;
   color: var(--text-primary);
 }
@@ -519,15 +535,109 @@ input, select, textarea {
   color: #fda4af;
 }
 
-/* Cylinder Representation */
-.cylinder-wrapper {
-  position: relative;
+/* Tank Level Banner (Digital Gauge Readout) */
+.tank-level-banner {
   display: flex;
-  justify-content: center;
+  justify-content: space-between;
   align-items: center;
-  margin: 1.5rem 0;
+  background-color: rgba(11, 17, 32, 0.65);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: 0.45rem 0.9rem;
+  margin-bottom: 1rem;
 }
 
+.level-banner-label {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.level-banner-digits {
+  display: flex;
+  align-items: baseline;
+  gap: 0.2rem;
+}
+
+.level-number {
+  font-size: 1.6rem;
+  font-weight: 800;
+  color: var(--text-primary);
+  font-feature-settings: 'tnum';
+}
+
+.level-number.text-alert {
+  color: #fda4af;
+}
+
+.level-unit {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--accent-cyan);
+}
+
+/* Cylinder Visualizer Container */
+.cylinder-visualizer-container {
+  display: flex;
+  justify-content: center;
+  align-items: stretch;
+  margin: 1.25rem 0;
+  gap: 0.75rem;
+}
+
+/* Ruler Scale (Outside Cylinder - No Overflow Clip) */
+.ruler-scale {
+  position: relative;
+  width: 58px;
+  height: 220px;
+  overflow: visible;
+}
+
+.ruler-mark {
+  position: absolute;
+  right: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  transform: translateY(-50%);
+}
+
+.r-100 { top: 0%; }
+.r-85  { top: 15%; }
+.r-75  { top: 25%; }
+.r-50  { top: 50%; }
+.r-25  { top: 75%; }
+.r-0   { top: 100%; }
+
+.ruler-label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  font-feature-settings: 'tnum';
+  text-align: right;
+  min-width: 34px;
+}
+
+.ruler-label-alert {
+  color: var(--accent-amber);
+  font-weight: 700;
+}
+
+.ruler-tick {
+  width: 8px;
+  height: 1.5px;
+  background-color: rgba(255, 255, 255, 0.35);
+}
+
+.ruler-tick-alert {
+  width: 12px;
+  height: 2px;
+  background-color: var(--accent-amber);
+}
+
+/* Cylinder Body */
 .cylinder-body {
   width: 140px;
   height: 220px;
@@ -563,79 +673,27 @@ input, select, textarea {
   filter: blur(1px);
 }
 
-/* Umbral de interlock 85% */
+/* Umbral de interlock al 85% */
 .interlock-threshold-line {
   position: absolute;
   bottom: 85%;
   left: 0;
   right: 0;
-  border-top: 2px dashed rgba(245, 158, 11, 0.8);
+  border-top: 2px dashed rgba(245, 158, 11, 0.85);
   z-index: 5;
   pointer-events: none;
 }
 
-.threshold-label {
+.threshold-tag {
   position: absolute;
   right: 4px;
   bottom: 2px;
-  font-size: 0.6rem;
+  font-size: 0.62rem;
   font-weight: 700;
   color: var(--accent-amber);
-  background-color: rgba(11, 17, 32, 0.8);
-  padding: 0 3px;
+  background-color: rgba(11, 17, 32, 0.85);
+  padding: 1px 4px;
   border-radius: 2px;
-}
-
-/* Ticks */
-.level-ticks {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 4px;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  pointer-events: none;
-}
-
-.tick-mark {
-  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
-  width: 14px;
-  position: relative;
-}
-
-.tick-mark span {
-  position: absolute;
-  left: 18px;
-  top: -6px;
-  font-size: 0.6rem;
-  color: var(--text-muted);
-}
-
-.level-display {
-  position: absolute;
-  display: flex;
-  align-items: baseline;
-  background-color: rgba(11, 17, 32, 0.75);
-  backdrop-filter: blur(4px);
-  padding: 0.35rem 0.75rem;
-  border-radius: var(--radius-md);
-  border: 1px solid var(--border-color);
-  pointer-events: none;
-}
-
-.level-number {
-  font-size: 1.6rem;
-  font-weight: 800;
-  color: var(--text-primary);
-  font-feature-settings: 'tnum';
-}
-
-.level-unit {
-  font-size: 0.9rem;
-  font-weight: 600;
-  color: var(--accent-cyan);
-  margin-left: 2px;
 }
 
 /* Tank Metrics Grid */
@@ -674,7 +732,7 @@ input, select, textarea {
   color: var(--text-secondary);
 }
 
-/* Hydraulic Junction */
+/* Hydraulic Junction (Gravity Discharge between A and B) */
 .hydraulic-junction {
   display: flex;
   flex-direction: column;
@@ -705,29 +763,13 @@ input, select, textarea {
   text-transform: uppercase;
   letter-spacing: 0.05em;
   display: block;
-  margin-bottom: 0.4rem;
+  margin-bottom: 0.25rem;
 }
 
-.flow-meter {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-}
-
-.flow-title {
-  font-size: 0.75rem;
-  color: var(--text-secondary);
-}
-
-.flow-value {
-  font-size: 1.5rem;
-  font-weight: 800;
+.junction-path {
+  font-size: 0.85rem;
+  font-weight: 700;
   color: var(--accent-cyan);
-}
-
-.flow-unit {
-  font-size: 0.7rem;
-  color: var(--text-muted);
 }
 
 /* Pump Control Card */
@@ -781,6 +823,42 @@ input, select, textarea {
 @keyframes pulse-avatar {
   0%, 100% { transform: scale(1); }
   50% { transform: scale(1.05); }
+}
+
+.pump-header-status {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  flex-wrap: wrap;
+}
+
+.pump-flow-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.35rem 0.75rem;
+  border-radius: var(--radius-sm);
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-color);
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+.flow-badge-label {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+
+.flow-badge-val {
+  font-weight: 700;
+  color: var(--accent-cyan);
+  font-feature-settings: 'tnum';
+  font-size: 1rem;
+}
+
+.flow-badge-unit {
+  color: var(--text-muted);
+  font-size: 0.75rem;
 }
 
 .pump-state-pill {
@@ -1294,5 +1372,9 @@ input, select, textarea {
   }
   .search-box {
     width: 100%;
+  }
+  .pump-header-status {
+    width: 100%;
+    justify-content: space-between;
   }
 }
