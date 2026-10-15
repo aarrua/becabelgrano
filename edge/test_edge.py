@@ -4,6 +4,7 @@ Pruebas Automatizadas de Validación para edge/simulator.py y edge/bridge.py (Fa
 """
 
 import json
+from pathlib import Path
 import time
 import unittest
 from unittest.mock import MagicMock, patch
@@ -195,6 +196,55 @@ class TestBridgeResilienceAndLogging(unittest.TestCase):
             if "escrituras exitosas acumuladas" in str(call)
         ]
         self.assertEqual(len(summary_logs), 2)
+
+    def test_simulator_initial_pump_from_config(self):
+        from edge.simulator import load_config
+        import tempfile
+        import os
+
+        yaml_content = """
+tank_a:
+  area_cm2: 100.0
+  height_max_cm: 40.0
+  volume_max_ml: 4000.0
+  discharge_coeff: 0.045
+  initial_level_pct: 15.0
+  initial_temp_c: 23.5
+tank_b:
+  area_cm2: 70.0
+  height_max_cm: 35.0
+  volume_max_ml: 2450.0
+  discharge_coeff: 0.038
+  initial_level_pct: 10.0
+  initial_temp_c: 23.2
+pump:
+  nominal_flow_lpm: 2.2
+  initial_pump: true
+"""
+        with tempfile.NamedTemporaryFile("w", suffix=".yaml", delete=False) as tf:
+            tf.write(yaml_content)
+            cfg_path = tf.name
+
+        try:
+            cfg = load_config(Path(cfg_path))
+            self.assertTrue(cfg["pump"].get("initial_pump"))
+        finally:
+            try:
+                os.remove(cfg_path)
+            except Exception:
+                pass
+
+    def test_bridge_passes_pump_on_flag(self):
+        mock_influx = MagicMock(spec=InfluxWriter)
+        mock_influx.org = "test-org"
+        mock_influx.bucket = "test-bucket"
+
+        with patch("edge.bridge.stream_simulator", return_value=iter([])) as mock_sim:
+            run_bridge("sim", mock_influx, pump_on=True)
+            mock_sim.assert_called_once()
+            _, kwargs = mock_sim.call_args
+            self.assertTrue(kwargs.get("pump_on"))
+            self.assertIn("--pump-on", kwargs.get("extra_args", []))
 
 
 if __name__ == "__main__":

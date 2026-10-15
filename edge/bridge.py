@@ -150,6 +150,7 @@ def stream_simulator(
     extra_args: Optional[list[str]] = None,
     initial_backoff: float = 1.0,
     max_backoff: float = 30.0,
+    pump_on: bool = False,
 ) -> Iterator[str]:
     """
     Ejecuta el simulador en un subproceso y streamea su salida estándar.
@@ -162,6 +163,8 @@ def stream_simulator(
     cmd = [sys.executable, str(script_path)]
     if cfg_path and (not extra_args or "--config" not in extra_args):
         cmd.extend(["--config", str(cfg_path)])
+    if pump_on and (not extra_args or "--pump-on" not in extra_args):
+        cmd.append("--pump-on")
     if extra_args:
         cmd.extend(extra_args)
 
@@ -310,6 +313,7 @@ def run_bridge(
     sim_speed: float = 1.0,
     config_path: Optional[Path | str] = None,
     log_interval: int = 30,
+    pump_on: bool = False,
 ) -> None:
     """Orquesta la lectura, timestamping y persistencia hacia InfluxDB."""
     resolved_config = Path(config_path) if config_path else DEFAULT_CONFIG_PATH
@@ -318,10 +322,13 @@ def run_bridge(
         lines_iterator = stream_stdin()
     elif source_spec.startswith("sim"):
         args = ["--speed", str(sim_speed)]
+        if pump_on:
+            args.append("--pump-on")
         lines_iterator = stream_simulator(
             sim_script=DEFAULT_SIM_PATH,
             config_path=resolved_config,
-            extra_args=args
+            extra_args=args,
+            pump_on=pump_on,
         )
     elif source_spec.startswith("serial:"):
         parts = source_spec[len("serial:"):].split(":")
@@ -397,6 +404,8 @@ def main() -> None:
                         help="Fuente de datos: 'sim', 'stdin', o 'serial:<puerto>[:baud]' (ej: 'serial:COM3')")
     parser.add_argument("--sim-speed", type=float, default=1.0,
                         help="Multiplicador de velocidad si se usa --source sim (ej: 5.0)")
+    parser.add_argument("--pump-on", action="store_true",
+                        help="Inicia el simulador con la bomba encendida (para probar llenado e interlocks)")
     parser.add_argument("--config", type=str, default=str(DEFAULT_CONFIG_PATH),
                         help="Ruta al archivo config.yaml (default: relativo a la ubicación del script)")
     parser.add_argument("--log-every", type=int, default=30,
@@ -434,7 +443,8 @@ def main() -> None:
             influx,
             sim_speed=args.sim_speed,
             config_path=args.config,
-            log_interval=args.log_every
+            log_interval=args.log_every,
+            pump_on=args.pump_on
         )
     except KeyboardInterrupt:
         logger.info("Bridge detenido limpiamente por el usuario.")

@@ -23,6 +23,7 @@ tank_b:
 pump:
   nominal_flow_lpm: 2.2    # Caudal nominal de la bomba en L/min cuando está encendida
   initial_state: false     # Estado inicial (apagada)
+  initial_pump: false      # Permite iniciar con la bomba encendida sin comandos por stdin
 
 # Entorno térmico (puramente pasivo, sin actuadores térmicos)
 thermal:

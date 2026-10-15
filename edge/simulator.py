@@ -99,6 +99,7 @@ DEFAULT_CONFIG: Dict[str, Any] = {
     "pump": {
         "nominal_flow_lpm": 2.2,
         "initial_state": False,
+        "initial_pump": False,
     },
     "thermal": {
         "ambient_temp_c": 22.5,
@@ -415,7 +416,7 @@ def main() -> None:
         temp_c=float(t_b_cfg["initial_temp_c"]),
     )
 
-    initial_pump = bool(args.pump_on or p_cfg.get("initial_state", False))
+    initial_pump = bool(args.pump_on or p_cfg.get("initial_pump", False) or p_cfg.get("initial_state", False))
 
     state = SimulatorState(
         tank_a=tank_a,
