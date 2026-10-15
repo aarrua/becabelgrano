@@ -108,26 +108,29 @@ Obtiene la última trama normalizada de telemetría física. En perfil `dev` pro
 **Response (200 OK)**:
 ```json
 {
-  "timestamp": 1740000000,
-  "tanque_a": {
-    "nivel": 45.2,
-    "volumen": 3.2,
-    "temperatura": 24.1,
-    "sensor_fault": false
+  "v": 1,
+  "seq": 1042,
+  "uptime_ms": 523411,
+  "tank_a": {
+    "weight_g": 1180.4,
+    "level_pct": 42.5,
+    "temp_c": 23.4
   },
-  "tanque_b": {
-    "nivel": 30.1,
-    "volumen": 2.1,
-    "temperatura": 23.8,
-    "sensor_fault": false
+  "tank_b": {
+    "weight_g": 601.0,
+    "level_pct": 18.2,
+    "temp_c": 23.1
   },
-  "actuadores": {
+  "flow_lpm": 1.8,
+  "actuators": {
     "pump": true
   },
-  "interlocks": {
+  "alarms": {
     "overflow_a": false,
-    "overflow_b": false
-  }
+    "overflow_b": false,
+    "sensor_fault": false
+  },
+  "mode": "auto"
 }
 ```
 

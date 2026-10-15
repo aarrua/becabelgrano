@@ -21,3 +21,6 @@ tanques:
     bucket: ${INFLUX_BUCKET:tanques}
   cors:
     allowed-origins: ${CORS_ALLOWED_ORIGINS:}
+  auth:
+    default-docente-password: ${DOCENTE_PASSWORD:docente123}
+    default-alumno-password: ${ALUMNO_PASSWORD:alumno123}

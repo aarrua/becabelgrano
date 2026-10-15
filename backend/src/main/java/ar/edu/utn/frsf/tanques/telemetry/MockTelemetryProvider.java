@@ -54,13 +54,9 @@ public class MockTelemetryProvider implements TelemetryProvider {
         double levelPctA = Math.min(100.0, Math.max(0.0, (volA / maxVolA) * 100.0));
         double levelPctB = Math.min(100.0, Math.max(0.0, (volB / maxVolB) * 100.0));
 
-        // Actualizar interlocks si sobrepasa 95%
-        if (levelPctA >= 95.0) {
-            actuatorGateway.setSimulatedAlarm("overflow_a", true);
-        }
-        if (levelPctB >= 95.0) {
-            actuatorGateway.setSimulatedAlarm("overflow_b", true);
-        }
+        // Actualizar interlocks de seguridad (corte por sobrellenado al 95% en cualquiera de los tanques)
+        actuatorGateway.setSimulatedAlarm("overflow_a", levelPctA >= 95.0);
+        actuatorGateway.setSimulatedAlarm("overflow_b", levelPctB >= 95.0);
 
         double flowLpm = pump ? 2.2 : 0.0;
 
