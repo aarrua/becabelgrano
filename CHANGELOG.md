@@ -8,10 +8,33 @@ y este proyecto adhiere a [Conventional Commits](https://www.conventionalcommits
 ---
 
 ## [Unreleased]
-### In Progress
-- **Fase 3**: Construcción de la aplicación web Frontend SPA en React + Vite + TypeScript (monitoreo en tiempo real, paneles Grafana embebidos y panel de control por roles).
 
 ---
+
+## [Fase 3 - Frontend SPA, Monitoreo y Control por Roles] - 2026-10-15
+
+### Added
+- **Single Page Application en React 19 y Vite**:
+  - Implementación moderna con React `19.3.1`, Vite `8.3.4`, TypeScript `7.0.2` y `@types/node 24.19.2`.
+  - Enrutamiento declarativo cliente con **React Router `7.18.4`** (`BrowserRouter`, `Routes`, `Route`, `Navigate`) importado desde `"react-router"`.
+  - Polling periódico de telemetría en tiempo real con **TanStack Query v5 (`5.104.2`)** mediante hook `useQuery` con intervalo configurable por entorno (`VITE_TELEMETRY_REFETCH_INTERVAL_MS`).
+  - Contexto de autenticación JWT (`AuthContext`) con persistencia en memoria y respaldo en `sessionStorage`, y cierre de sesión automático ante respuestas 401.
+  - Guarda de navegación `ProtectedRoute` para control de acceso y redirección por rol (`DOCENTE` vs `ALUMNO`).
+  - Vista sinóptica gráfica animada (`TankVisualizer`) con cilindros de agua proporcionales, marcas de nivel, línea de umbral de interlock del 85%, métricas de masa (`weight_g`), caudal (`flow_lpm`) y temperatura (`temp_c`).
+  - Panel de control de bomba de impulsión (`PumpControl`) exclusivo para rol `DOCENTE`, con mutación asíncrona mediante `useMutation` e invalidación automática de queries.
+  - Modo observador de solo lectura para rol `ALUMNO`: oculta la botonera de control y el enlace a auditoría.
+  - Mapeo semántico de errores en control de actuadores:
+    - HTTP 503 (`reason: "bridge_unavailable"`): *"Control no disponible: sin conexión con el equipo"*.
+    - HTTP 409 (`InterlockViolationException`): Exposición legible del motivo de rechazo por sobrellenado o falla de sensor.
+    - HTTP 403: *"Acceso denegado: solo usuarios con rol DOCENTE pueden operar actuadores"*.
+  - Vista de auditoría histórica (`AuditView` y `AuditTable`) exclusiva para `DOCENTE`, con filtrado por resultado (Todos, Aceptados, Rechazados) y buscador de eventos.
+  - Dashboard histórico embebido de Grafana (`GrafanaEmbed`) con URL configurable por variable de entorno `VITE_GRAFANA_DASHBOARD_URL`.
+  - Colección de íconos SVG inline (`Icons.tsx`) y diseño industrial dark personalizado con CSS plano (`index.css`) responsivo para dispositivos móviles y escritorio.
+
+### Changed
+- Fijadas versiones exactas y estrictas en `frontend/package.json` (sin rangos `^` ni `~`) y versionado de `package-lock.json`.
+- Documentada la justificación arquitectónica de adopción de React Router 7.18.4 frente a 8.4.0 en `frontend/README.md` y `AGENTS.md`.
+
 
 ## [Fase 2 - Backend REST, Seguridad JWT y Auditoría] - 2026-10-15
 

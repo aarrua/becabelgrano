@@ -80,9 +80,10 @@ graph TD
 | **Fase 0** | Reglas de repositorio, contratos de datos, flujos de interlock y documentación base | **Completada** |
 | **Fase 1** | Simulador físico de tanques, bridge serial, InfluxDB, Grafana y nginx | **Completada** |
 | **Fase 2** | Backend Spring Boot (JWT, roles DOCENTE/ALUMNO, ActuatorGateway, auditoría H2) | **Completada** |
-| **Fase 3** | Frontend React SPA (Monitoreo, paneles Grafana embebidos, control seguro por roles) | **En Curso** |
+| **Fase 3** | Frontend React SPA (Monitoreo, paneles Grafana embebidos, control seguro por roles) | **Completada** |
 
 Consultá el detalle de cambios históricos en el [CHANGELOG.md](file:///c:/Users/Ale/OneDrive%20-%20UTN%20-%20Santa%20Fe/UTN%202025/Beca%20Belgrano/becabelgrano/CHANGELOG.md).
+
 
 ---
 

@@ -117,11 +117,16 @@ Cada commit debe respetar la especificación [Conventional Commits](https://www.
 - Manejo limpio de señales (`SIGINT`, `SIGTERM`) para cierre ordenado.
 - En comunicación serial (`pyserial`): **siempre** deshabilitar DTR y RTS (`dtr=False`, `rts=False`) antes de abrir el puerto para evitar reiniciar el ESP32.
 
-### 5.3 Frontend (React / TypeScript - Fase 3)
-- Vite + React 18+ + TypeScript en modo estricto.
-- Centralización de contratos de telemetría y comandos en `src/types/telemetry.ts`.
-- Manejo de estado remoto con TanStack Query (polling configurable mediante `refetchInterval`). Sin WebSockets.
-- Persistencia de JWT en memoria con respaldo en `sessionStorage`.
+### 5.3 Frontend (React 19 / TypeScript - Fase 3)
+- **Vite 8.3.4 + React 19.3.1 + TypeScript 7.0.2** en modo estricto.
+- **Enrutamiento**: Se seleccionó **React Router `7.18.4`** en lugar de `8.4.0` **por prudencia y estabilidad arquitectónica**. La línea 7.x mantiene soporte de primera clase para el **modo declarativo tradicional** (`<BrowserRouter>`, `<Routes>`, `<Route>`, `useNavigate`, `useLocation`) importado directamente desde el paquete `"react-router"`, permitiendo operar la aplicación como una SPA puramente cliente sin acoplarse al modo framework (SSR, loaders de servidor o convenciones de carpetas invasivas) y sin incompatibilidades con el ecosistema de React 19.
+- Centralización de contratos de telemetría y comandos en `src/types/telemetry.ts` respetando `docs/01-contrato-datos.md`.
+- Manejo de estado remoto con TanStack Query v5 (`5.104.2`) mediante polling periódico configurable (`refetchInterval`). Sin WebSockets.
+- Persistencia de JWT en memoria con respaldo en `sessionStorage`. Cierre de sesión automático ante respuestas HTTP 401.
+- Control de actuadores segregado por rol:
+  - `ALUMNO`: modo observador de solo lectura, sin botonera de control de bomba ni acceso a la vista de auditoría.
+  - `DOCENTE`: panel de accionamiento interactivo de bomba con manejo semántico de errores (503: *"Control no disponible: sin conexión con el equipo"*, 409: motivo del interlock de sobrellenado) y acceso a auditoría histórica.
+- Dependencias exactas fijadas sin rangos (`^` ni `~`) en `package.json` y versionado de `package-lock.json`.
 
 ---
 
@@ -131,7 +136,7 @@ El proyecto avanza estrictamente por fases según lo estipulado:
 - **Fase 0**: Reglas del repo, contratos y documentación base.
 - **Fase 1**: Simulador en Python (`edge/simulator.py`), bridge a InfluxDB (`edge/bridge.py`), Docker Compose (InfluxDB 2.x, Grafana, Nginx) y provisioning de dashboards.
 - **Fase 2**: Backend Spring Boot 3.5.x, seguridad JWT, endpoints REST, auditoría H2, gateways y tests unitarios/integración.
-- **Fase 3**: Frontend React SPA con Vite, TypeScript, vistas de monitoreo y panel de control por roles.
+- **Fase 3**: Frontend React SPA con Vite, TypeScript, vistas de monitoreo y panel de control por roles (Completada).
 
 Al completar cada fase:
 1. Asegurar que las pruebas y verificaciones manuales indicadas se cumplan.
@@ -149,9 +154,10 @@ Al completar cada fase:
 
 1. **Canal real de comandos backend $\to$ bridge $\to$ ESP32**:
    Hoy `BridgeActuatorGateway` en prod devuelve HTTP `503 Service Unavailable` (`bridge_unavailable`) porque `edge/bridge.py` actualmente solo implementa el canal de ingesta unidireccional (Serial $\to$ InfluxDB). Debe construirse un listener local de comandos (ej. HTTP REST local en `bridge.py` o socket IPC) para que el bridge despache la trama serial al ESP32 y retorne el `ack` correspondiente.
-2. **Registro de auditoría no incluye `target`**:
-   Verificar y garantizar la exposición y consumo homogéneo del campo `target` en todas las interfaces de auditoría y en las vistas del frontend.
+2. **Registro de auditoría incluye `target`**:
+   El campo `target` se encuentra plenamente integrado en `AuditLogResponse` (backend) y expuesto en la columna correspondiente de `AuditTable` en el frontend.
 3. **Calibración del interlock con el hardware físico real**:
    La apertura manual de la llave de interconexión Tanque A $\to$ Tanque B altera la tasa de descarga por gravedad y la altura máxima acumulada en B. En la puesta en marcha con hardware se debe calibrar el umbral y evaluar un interlock de corte por volumen total combinado ($V_A + V_B$). El interlock definitivo de seguridad de última barrera reside obligatoriamente en el firmware del ESP32.
 4. **Divergencia de telemetría en desarrollo vs producción**:
    En perfil `dev` el backend genera telemetría simulada con `MockTelemetryProvider` en memoria, mientras que Grafana lee los puntos generados por `edge/bridge.py` + `edge/simulator.py` en InfluxDB. Ambas fuentes se unifican de forma transparente en perfil `prod`, donde tanto backend como Grafana consumen InfluxDB 2.x.
+
