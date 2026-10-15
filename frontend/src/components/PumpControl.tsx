@@ -2,11 +2,12 @@ import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { sendActuatorCommand } from '../api/actuators'
 import { useAuth } from '../context/AuthContext'
-import { PumpIcon, LockIcon, AlertTriangleIcon, CheckCircleIcon } from './Icons'
+import { PumpIcon, FlowIcon, LockIcon, AlertTriangleIcon, CheckCircleIcon } from './Icons'
 import { ApiError } from '../types/telemetry'
 
 interface PumpControlProps {
   currentPumpState: boolean
+  flowLpm?: number
   isInterlockBlocked?: boolean
   interlockReason?: string
 }
@@ -27,6 +28,7 @@ function mapInterlockReason(reason?: string): string {
 
 export function PumpControl({
   currentPumpState,
+  flowLpm = 0,
   isInterlockBlocked = false,
   interlockReason,
 }: PumpControlProps) {
@@ -87,12 +89,21 @@ export function PumpControl({
           <div>
             <h3 className="section-title">Bomba de Impulsión</h3>
             <p className="section-subtitle">
-              {isDocente ? 'Control de actuador físico (Tanque B &rarr; Tanque A)' : 'Monitoreo de actuador'}
+              {isDocente
+                ? 'Control de actuador físico (Reservorio → Tanque A)'
+                : 'Monitoreo de actuador (Reservorio → Tanque A)'}
             </p>
           </div>
         </div>
 
         <div className="pump-header-status">
+          <div className="pump-flow-badge" title="Caudal medido en la impulsión">
+            <FlowIcon width="16" height="16" />
+            <span className="flow-badge-label">Caudal de entrada:</span>
+            <span className="flow-badge-val">{flowLpm.toFixed(2)}</span>
+            <span className="flow-badge-unit">L/min</span>
+          </div>
+
           <span className={`pump-state-pill ${currentPumpState ? 'state-on' : 'state-off'}`}>
             <span className="state-dot" />
             {currentPumpState ? 'ENCENDIDA' : 'APAGADA'}

@@ -121,14 +121,14 @@ export function MonitorView() {
         <TankVisualizer
           tankA={telemetry.tank_a}
           tankB={telemetry.tank_b}
-          flowLpm={telemetry.flow_lpm}
           alarms={alarms}
         />
       )}
 
-      {/* Panel de Control de Bomba (con comportamiento según rol) */}
+      {/* Panel de Control de Bomba (con caudal de entrada y comportamiento según rol) */}
       <PumpControl
         currentPumpState={pumpState}
+        flowLpm={telemetry?.flow_lpm ?? 0}
         isInterlockBlocked={isInterlockBlocked}
         interlockReason={interlockReason}
       />
