@@ -19,8 +19,8 @@
   
   --tank-water: #0284c7;
   --tank-water-surface: #38bdf8;
-  --tank-bg: #090e1a;
-  --tank-glass: rgba(56, 189, 248, 0.08);
+  --tank-bg: #070d18;
+  --tank-border: #334e7a;
 
   --font-sans: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
   --radius-sm: 6px;
@@ -349,7 +349,490 @@ input, select, textarea {
   margin-bottom: 1.25rem;
 }
 
+/* Telemetry Status Bar */
+.telemetry-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 0.75rem 1.25rem;
+  margin-bottom: 1.5rem;
+  flex-wrap: wrap;
+}
+
+.telemetry-bar-group {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+  flex-wrap: wrap;
+}
+
+.status-indicator {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.status-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+.dot-online {
+  background-color: var(--accent-emerald);
+  box-shadow: 0 0 8px var(--accent-emerald);
+}
+
+.telemetry-badge {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+.badge-name {
+  color: var(--text-muted);
+}
+
+.badge-val {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.badge-val.uppercase {
+  text-transform: uppercase;
+}
+
+.alarm-indicator {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  padding: 0.3rem 0.75rem;
+  border-radius: 9999px;
+}
+
+.indicator-ok {
+  background-color: rgba(16, 185, 129, 0.15);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.indicator-danger {
+  background-color: rgba(244, 63, 94, 0.15);
+  color: #fda4af;
+  border: 1px solid rgba(244, 63, 94, 0.4);
+  animation: pulse-danger 1.5s infinite;
+}
+
+@keyframes pulse-danger {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.65; }
+}
+
+.alert-sensor-fault {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  background-color: rgba(245, 158, 11, 0.15);
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  color: #fde68a;
+  padding: 0.9rem 1.25rem;
+  border-radius: var(--radius-md);
+  font-size: 0.9rem;
+  margin-bottom: 1.5rem;
+}
+
+/* Synoptic Tanks View */
+.synoptic-section {
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  padding: 1.75rem;
+  margin-bottom: 1.5rem;
+  box-shadow: var(--shadow-sm);
+}
+
+.tanks-layout {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 1.5rem;
+  align-items: center;
+}
+
+.tank-card {
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 1.25rem;
+  transition: all 0.2s ease;
+}
+
+.tank-card.tank-warning {
+  border-color: rgba(244, 63, 94, 0.6);
+  box-shadow: 0 0 15px rgba(244, 63, 94, 0.15);
+}
+
+.tank-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 1rem;
+}
+
+.tank-name {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.tank-subtitle {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.tank-status-pill {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.2rem 0.5rem;
+  border-radius: 9999px;
+}
+
+.pill-ok {
+  background-color: rgba(16, 185, 129, 0.15);
+  color: #34d399;
+}
+
+.pill-alert {
+  background-color: rgba(244, 63, 94, 0.2);
+  color: #fda4af;
+}
+
+/* Cylinder Representation */
+.cylinder-wrapper {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin: 1.5rem 0;
+}
+
+.cylinder-body {
+  width: 140px;
+  height: 220px;
+  background-color: var(--tank-bg);
+  border: 3px solid var(--tank-border);
+  border-radius: 12px;
+  position: relative;
+  overflow: hidden;
+  box-shadow: inset 0 0 15px rgba(0, 0, 0, 0.6);
+}
+
+.water-fill {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: linear-gradient(180deg, var(--tank-water-surface) 0%, var(--tank-water) 100%);
+  transition: height 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+  opacity: 0.85;
+}
+
+.water-fill.water-alert {
+  background: linear-gradient(180deg, #fb7185 0%, #e11d48 100%);
+}
+
+.water-wave {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.4);
+  filter: blur(1px);
+}
+
+/* Umbral de interlock 85% */
+.interlock-threshold-line {
+  position: absolute;
+  bottom: 85%;
+  left: 0;
+  right: 0;
+  border-top: 2px dashed rgba(245, 158, 11, 0.8);
+  z-index: 5;
+  pointer-events: none;
+}
+
+.threshold-label {
+  position: absolute;
+  right: 4px;
+  bottom: 2px;
+  font-size: 0.6rem;
+  font-weight: 700;
+  color: var(--accent-amber);
+  background-color: rgba(11, 17, 32, 0.8);
+  padding: 0 3px;
+  border-radius: 2px;
+}
+
+/* Ticks */
+.level-ticks {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 4px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  pointer-events: none;
+}
+
+.tick-mark {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+  width: 14px;
+  position: relative;
+}
+
+.tick-mark span {
+  position: absolute;
+  left: 18px;
+  top: -6px;
+  font-size: 0.6rem;
+  color: var(--text-muted);
+}
+
+.level-display {
+  position: absolute;
+  display: flex;
+  align-items: baseline;
+  background-color: rgba(11, 17, 32, 0.75);
+  backdrop-filter: blur(4px);
+  padding: 0.35rem 0.75rem;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color);
+  pointer-events: none;
+}
+
+.level-number {
+  font-size: 1.6rem;
+  font-weight: 800;
+  color: var(--text-primary);
+  font-feature-settings: 'tnum';
+}
+
+.level-unit {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--accent-cyan);
+  margin-left: 2px;
+}
+
+/* Tank Metrics Grid */
+.tank-metrics-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.metric-box {
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: 0.6rem 0.8rem;
+}
+
+.metric-header {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-bottom: 0.25rem;
+}
+
+.metric-value {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.metric-value .unit {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+/* Hydraulic Junction */
+.hydraulic-junction {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.junction-line {
+  width: 2px;
+  height: 40px;
+  background: linear-gradient(180deg, var(--tank-water-surface) 0%, var(--tank-water) 100%);
+  position: relative;
+}
+
+.junction-badge {
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 0.9rem 1.1rem;
+  text-align: center;
+  box-shadow: var(--shadow-sm);
+}
+
+.junction-label {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  display: block;
+  margin-bottom: 0.4rem;
+}
+
+.flow-meter {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.flow-title {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
+.flow-value {
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: var(--accent-cyan);
+}
+
+.flow-unit {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+}
+
+/* Grafana Section */
+.grafana-section {
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  padding: 1.5rem;
+  margin-bottom: 1.5rem;
+  box-shadow: var(--shadow-sm);
+}
+
+.grafana-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.25rem;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.section-title {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.section-subtitle {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.btn-external-link {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--accent-cyan);
+  padding: 0.35rem 0.75rem;
+  border-radius: var(--radius-sm);
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-color);
+  transition: all 0.15s ease;
+}
+
+.btn-external-link:hover {
+  background-color: var(--bg-card-hover);
+  color: #7dd3fc;
+}
+
+.grafana-frame-wrapper {
+  position: relative;
+  width: 100%;
+  height: 600px;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  border: 1px solid var(--border-color);
+  background-color: #0b1120;
+}
+
+.grafana-iframe {
+  width: 100%;
+  height: 100%;
+  border: none;
+}
+
+/* Loading state */
+.loading-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 50vh;
+  gap: 1rem;
+  color: var(--text-secondary);
+}
+
+.spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid rgba(56, 189, 248, 0.2);
+  border-top-color: var(--accent-cyan);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
 /* Responsiveness */
+@media (max-width: 900px) {
+  .tanks-layout {
+    grid-template-columns: 1fr;
+  }
+  .hydraulic-junction {
+    flex-direction: row;
+  }
+  .junction-line {
+    width: 40px;
+    height: 2px;
+  }
+  .grafana-frame-wrapper {
+    height: 450px;
+  }
+}
+
 @media (max-width: 640px) {
   .navbar-container {
     padding: 0.6rem 1rem;
@@ -362,5 +845,8 @@ input, select, textarea {
   }
   .main-content {
     padding: 1rem;
+  }
+  .grafana-frame-wrapper {
+    height: 380px;
   }
 }

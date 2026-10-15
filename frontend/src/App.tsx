@@ -4,6 +4,7 @@ import { AuthProvider } from './context/AuthContext'
 import { ProtectedRoute } from './components/ProtectedRoute'
 import { Navbar } from './components/Navbar'
 import { LoginView } from './views/LoginView'
+import { MonitorView } from './views/MonitorView'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -29,7 +30,7 @@ export default function App() {
                   <div className="app-layout">
                     <Navbar />
                     <main className="main-content">
-                      <h2>Panel de Monitoreo</h2>
+                      <MonitorView />
                     </main>
                   </div>
                 </ProtectedRoute>
