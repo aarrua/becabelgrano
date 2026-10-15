@@ -9,7 +9,19 @@ y este proyecto adhiere a [Conventional Commits](https://www.conventionalcommits
 
 ## [Unreleased]
 
+### Planned (Fase 4 - Puesta en Marcha Integral, Integración en Producción y Firmware)
+- Prueba y validación del backend en perfil `prod` contra InfluxDB 2.x (`InfluxTelemetryProvider`) y verificación de consistencia con los dashboards de Grafana.
+- Despliegue de los artefactos estáticos compilados de la SPA (`frontend/dist/`) en el contenedor Nginx en la raíz `/`.
+- Implementación del canal bidireccional de comandos en `edge/bridge.py` (listener local) para despacho serial hacia el ESP32 / simulador y resolución de `BridgeActuatorGateway` (503).
+- Firmware definitivo para ESP32 con contrato JSON v1, parser de comandos e interlocks de hardware de última barrera.
+- Calibración del umbral de interlock del 85% con el kit físico y evaluación de corte por volumen total combinado (A+B).
+- Ajuste del formato de decimales en los gauges del dashboard de Grafana (`Decimals = 1`).
+- Etiqueta dinámica de conexión en la SPA según timestamp de última trama recibida (> 5 s sin datos).
+- Incorporación homogénea del campo `target` en todos los modelos de auditoría.
+- Validación visual de diseño en dispositivos móviles reales.
+
 ---
+
 
 ## [Fase 3 - Frontend SPA, Monitoreo y Control por Roles] - 2026-10-15
 

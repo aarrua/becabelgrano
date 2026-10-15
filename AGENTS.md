@@ -126,6 +126,8 @@ Cada commit debe respetar la especificación [Conventional Commits](https://www.
 - Control de actuadores segregado por rol:
   - `ALUMNO`: modo observador de solo lectura, sin botonera de control de bomba ni acceso a la vista de auditoría.
   - `DOCENTE`: panel de accionamiento interactivo de bomba con manejo semántico de errores (503: *"Control no disponible: sin conexión con el equipo"*, 409: motivo del interlock de sobrellenado) y acceso a auditoría histórica.
+- **Proxy de `/grafana` en desarrollo**: `vite.config.ts` incluye obligatoriamente un proxy para `/grafana` hacia `http://localhost` (Nginx en `infra/`) con `changeOrigin: true` y `ws: true`. Esto evita que Vite devuelva la SPA por error y previene bucles de iframes.
+- **Defensa anti-anidamiento de iframes**: `src/main.tsx` valida `window.self === window.top`, bloqueando la renderización si la SPA es embebida en un frame.
 - Dependencias exactas fijadas sin rangos (`^` ni `~`) en `package.json` y versionado de `package-lock.json`.
 
 ---
@@ -133,10 +135,11 @@ Cada commit debe respetar la especificación [Conventional Commits](https://www.
 ## 6. Procedimiento de Trabajo por Fases
 
 El proyecto avanza estrictamente por fases según lo estipulado:
-- **Fase 0**: Reglas del repo, contratos y documentación base.
-- **Fase 1**: Simulador en Python (`edge/simulator.py`), bridge a InfluxDB (`edge/bridge.py`), Docker Compose (InfluxDB 2.x, Grafana, Nginx) y provisioning de dashboards.
-- **Fase 2**: Backend Spring Boot 3.5.x, seguridad JWT, endpoints REST, auditoría H2, gateways y tests unitarios/integración.
-- **Fase 3**: Frontend React SPA con Vite, TypeScript, vistas de monitoreo y panel de control por roles (Completada).
+- **Fase 0**: Reglas del repo, contratos y documentación base. (Completada)
+- **Fase 1**: Simulador en Python (`edge/simulator.py`), bridge a InfluxDB (`edge/bridge.py`), Docker Compose (InfluxDB 2.x, Grafana, Nginx) y provisioning de dashboards. (Completada)
+- **Fase 2**: Backend Spring Boot 3.5.x, seguridad JWT, endpoints REST, auditoría H2, gateways y tests unitarios/integración. (Completada)
+- **Fase 3**: Frontend React SPA con Vite, TypeScript, vistas de monitoreo y panel de control por roles. (Completada)
+- **Fase 4**: Puesta en marcha integral, integración en producción, bridge bidireccional y firmware. (Pendiente)
 
 Al completar cada fase:
 1. Asegurar que las pruebas y verificaciones manuales indicadas se cumplan.
@@ -150,14 +153,25 @@ Al completar cada fase:
 
 ---
 
-## 7. Pendientes Conocidos y Próximos Pasos
+## 7. Pendientes Conocidos y Próximos Pasos (Fase 4)
 
-1. **Canal real de comandos backend $\to$ bridge $\to$ ESP32**:
-   Hoy `BridgeActuatorGateway` en prod devuelve HTTP `503 Service Unavailable` (`bridge_unavailable`) porque `edge/bridge.py` actualmente solo implementa el canal de ingesta unidireccional (Serial $\to$ InfluxDB). Debe construirse un listener local de comandos (ej. HTTP REST local en `bridge.py` o socket IPC) para que el bridge despache la trama serial al ESP32 y retorne el `ack` correspondiente.
-2. **Registro de auditoría incluye `target`**:
-   El campo `target` se encuentra plenamente integrado en `AuditLogResponse` (backend) y expuesto en la columna correspondiente de `AuditTable` en el frontend.
-3. **Calibración del interlock con el hardware físico real**:
-   La apertura manual de la llave de interconexión Tanque A $\to$ Tanque B altera la tasa de descarga por gravedad y la altura máxima acumulada en B. En la puesta en marcha con hardware se debe calibrar el umbral y evaluar un interlock de corte por volumen total combinado ($V_A + V_B$). El interlock definitivo de seguridad de última barrera reside obligatoriamente en el firmware del ESP32.
-4. **Divergencia de telemetría en desarrollo vs producción**:
-   En perfil `dev` el backend genera telemetría simulada con `MockTelemetryProvider` en memoria, mientras que Grafana lee los puntos generados por `edge/bridge.py` + `edge/simulator.py` en InfluxDB. Ambas fuentes se unifican de forma transparente en perfil `prod`, donde tanto backend como Grafana consumen InfluxDB 2.x.
+1. **Probar el backend en perfil prod contra InfluxDB**:
+   `InfluxTelemetryProvider` nunca se probó con datos reales generados por el bridge. Se debe verificar y confirmar que los valores mostrados en la SPA coincidan exactamente con los paneles de Grafana.
+2. **Servir el build del front (`dist/`) desde Nginx en `/`**:
+   Actualmente `infra/nginx/nginx.conf` sirve un `index.html` estático de placeholder. Se debe configurar el volumen o despliegue para servir `frontend/dist/` en el contenedor Nginx para producción.
+3. **Canal real de comandos backend $\to$ bridge $\to$ ESP32**:
+   Hoy `BridgeActuatorGateway` en prod devuelve HTTP `503 Service Unavailable` (`bridge_unavailable`). Debe construirse el canal de comandos (ej. listener HTTP REST local en `bridge.py` o socket IPC) para que el bridge despache la trama serial al microcontrolador y retorne el `ack` correspondiente, y debe poder probarse tanto con el simulador como con el hardware.
+4. **Firmware definitivo del ESP32**:
+   Implementación en C/C++ (Arduino/ESP-IDF) con emisión periódica de telemetría respetando el contrato JSON v1, recepción e interpretación de comandos seriales y los interlocks de seguridad definitivos de última barrera en el microcontrolador.
+5. **Calibrar el umbral del interlock (85 %) con el hardware físico real**:
+   La apertura manual de la llave de interconexión Tanque A $\to$ Tanque B altera la tasa de descarga por gravedad y la altura máxima acumulada en B. En la puesta en marcha con hardware se debe calibrar el umbral y considerar un interlock de corte por volumen total combinado ($V_A + V_B$).
+6. **Formato de Gauges en Grafana**:
+   Los gauges del dashboard provisionado muestran actualmente valores como `0.100%`. Se debe configurar `Decimals = 1` en el JSON del dashboard (`infra/grafana/provisioning/dashboards/tanques-dashboard.json`).
+7. **Etiqueta dinámica de conexión ESP32 en la SPA**:
+   La etiqueta "ESP32 Conectado" de la barra superior debe depender dinámicamente de la antigüedad de la última trama de telemetría recibida (marcar "Sin datos" o "Desconectado" si transcurrieron más de 5 segundos sin actualización), en lugar de mostrar un estado estático.
+8. **Registro de auditoría no incluye `target`**:
+   Verificar y garantizar la incorporación y consistencia del campo `target` en todos los flujos y modelos de auditoría entre backend y bridge.
+9. **Verificación del diseño en vista de celular**:
+   El diseño responsivo para móviles quedó implementado con media queries y testeado funcionalmente, pero no se probó visualmente en un dispositivo físico real.
+
 
