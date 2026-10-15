@@ -35,6 +35,19 @@ y este proyecto adhiere a [Conventional Commits](https://www.conventionalcommits
 - Fijadas versiones exactas y estrictas en `frontend/package.json` (sin rangos `^` ni `~`) y versionado de `package-lock.json`.
 - Documentada la justificación arquitectónica de adopción de React Router 7.18.4 frente a 8.4.0 en `frontend/README.md` y `AGENTS.md`.
 
+### Fixed
+- **Proxy de Grafana y prevención de anidamiento de iframes**:
+  - Configurado proxy para `/grafana` en `vite.config.ts` hacia `http://localhost` (Nginx en infra), resolviendo el bucle de iframes donde la SPA se servía a sí misma.
+  - Implementada defensa anti-anidamiento en `main.tsx` validando `window.self === window.top`.
+  - Normalizado enlace "Abrir en Grafana" para remover el parámetro `kiosk` manteniendo la URL del dashboard.
+- **Corrección de textos y dirección de impulsión**:
+  - Reemplazado `&rarr;` literal por flecha unicode y corregida la dirección hidráulica a `Reservorio → Tanque A`.
+  - Reubicado el indicador de caudal de impulsión como "Caudal de entrada" en la tarjeta de la bomba, liberando la unión central de los tanques para representar exclusivamente la descarga por gravedad (`Tanque A → Tanque B`).
+- **Rediseño del sinóptico de tanques (`TankVisualizer`)**:
+  - Extraída la escala graduada fuera del contenedor del cilindro para evitar recortes de texto en las marcas (100%, 85%, 75%, 50%, 25%, 0%).
+  - Trasladada la lectura digital porcentual de nivel a un encabezado dedicado superior, evitando la superposición sobre la columna de líquido y las marcas de nivel.
+
+
 
 ## [Fase 2 - Backend REST, Seguridad JWT y Auditoría] - 2026-10-15
 
