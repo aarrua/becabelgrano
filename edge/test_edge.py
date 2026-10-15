@@ -6,7 +6,16 @@ Pruebas Automatizadas de Validación para edge/simulator.py y edge/bridge.py (Fa
 import json
 import time
 import unittest
-from edge.bridge import format_influx_line, InfluxWriter
+from unittest.mock import MagicMock, patch
+from edge.bridge import (
+    DEFAULT_CONFIG_PATH,
+    DEFAULT_SIM_PATH,
+    InfluxWriter,
+    format_influx_line,
+    logger as bridge_logger,
+    run_bridge,
+    stream_simulator,
+)
 from edge.simulator import (
     SimulatorState,
     TankState,
@@ -115,6 +124,77 @@ class TestBridgeFormatting(unittest.TestCase):
         self.assertIn("pump=true", line)
         self.assertIn("overflow_a=false", line)
         self.assertTrue(line.endswith(f" {ts_ns}"))
+
+
+class TestBridgeResilienceAndLogging(unittest.TestCase):
+    def test_default_paths_exist(self):
+        self.assertTrue(DEFAULT_SIM_PATH.is_file(), f"No existe {DEFAULT_SIM_PATH}")
+        self.assertTrue(DEFAULT_CONFIG_PATH.is_file(), f"No existe {DEFAULT_CONFIG_PATH}")
+        self.assertEqual(DEFAULT_SIM_PATH.name, "simulator.py")
+        self.assertEqual(DEFAULT_CONFIG_PATH.name, "config.yaml")
+
+    def test_stream_simulator_logs_failure_and_retries(self):
+        import os
+        import tempfile
+
+        class StopRetry(Exception):
+            pass
+
+        # Script temporal que falla con código 42 y stderr
+        with tempfile.NamedTemporaryFile("w", suffix=".py", delete=False) as tf:
+            tf.write("import sys\nsys.stderr.write('CRASH_ERR_SIM_FAIL\\n')\nsys.exit(42)\n")
+            fpath = tf.name
+
+        try:
+            with patch("edge.bridge.time.sleep", side_effect=StopRetry), \
+                 patch.object(bridge_logger, "error") as mock_log_err:
+                gen = stream_simulator(sim_script=fpath, config_path=None, initial_backoff=0.01)
+                with self.assertRaises(StopRetry):
+                    next(gen)
+
+                mock_log_err.assert_called()
+                error_call_str = " ".join(str(arg) for arg in mock_log_err.call_args[0])
+                self.assertIn("42", error_call_str)
+                self.assertIn("CRASH_ERR_SIM_FAIL", error_call_str)
+        finally:
+            try:
+                os.remove(fpath)
+            except Exception:
+                pass
+
+    def test_run_bridge_logs_every_n_successful_writes(self):
+        sample_frame = json.dumps({
+            "v": 1,
+            "seq": 1,
+            "uptime_ms": 1000,
+            "tank_a": {"weight_g": 1000.0, "level_pct": 25.0, "temp_c": 22.0},
+            "tank_b": {"weight_g": 500.0, "level_pct": 20.0, "temp_c": 22.0},
+            "flow_lpm": 1.5,
+            "actuators": {"pump": True},
+            "alarms": {"overflow_a": False, "overflow_b": False, "sensor_fault": False},
+            "mode": "auto"
+        })
+
+        def mock_lines():
+            for _ in range(65):
+                yield sample_frame
+
+        mock_influx = MagicMock(spec=InfluxWriter)
+        mock_influx.org = "test-org"
+        mock_influx.bucket = "test-bucket"
+        mock_influx.write_line_protocol.return_value = True
+
+        with patch("edge.bridge.stream_stdin", return_value=mock_lines()), \
+             patch.object(bridge_logger, "info") as mock_info:
+            run_bridge("stdin", mock_influx, log_interval=30)
+
+        # Se enviaron 65 tramas con log_interval=30.
+        # Debe haber logueado a nivel INFO en 30 y 60.
+        summary_logs = [
+            call for call in mock_info.call_args_list
+            if "escrituras exitosas acumuladas" in str(call)
+        ]
+        self.assertEqual(len(summary_logs), 2)
 
 
 if __name__ == "__main__":

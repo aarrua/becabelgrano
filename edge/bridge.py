@@ -26,7 +26,13 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Dict, Iterator, Optional
+
+# Rutas resueltas relativas a la ubicación del script
+BASE_DIR = Path(__file__).resolve().parent
+DEFAULT_SIM_PATH = BASE_DIR / "simulator.py"
+DEFAULT_CONFIG_PATH = BASE_DIR / "config.yaml"
 
 # Configuración de logging
 logging.basicConfig(
@@ -138,22 +144,104 @@ def stream_stdin() -> Iterator[str]:
         yield line
 
 
-def stream_simulator(sim_script: str = "edge/simulator.py", extra_args: Optional[list[str]] = None) -> Iterator[str]:
-    """Ejecuta el simulador en un subproceso y streamea su salida estándar."""
-    cmd = [sys.executable, sim_script]
+def stream_simulator(
+    sim_script: Optional[Path | str] = None,
+    config_path: Optional[Path | str] = None,
+    extra_args: Optional[list[str]] = None,
+    initial_backoff: float = 1.0,
+    max_backoff: float = 30.0,
+) -> Iterator[str]:
+    """
+    Ejecuta el simulador en un subproceso y streamea su salida estándar.
+    Si el subproceso del simulador termina o falla, loguea su código de salida y su stderr,
+    y reintenta con backoff exponencial en lugar de quedar colgado en silencio.
+    """
+    script_path = Path(sim_script) if sim_script else DEFAULT_SIM_PATH
+    cfg_path = Path(config_path) if config_path else DEFAULT_CONFIG_PATH
+
+    cmd = [sys.executable, str(script_path)]
+    if cfg_path and (not extra_args or "--config" not in extra_args):
+        cmd.extend(["--config", str(cfg_path)])
     if extra_args:
         cmd.extend(extra_args)
-    logger.info("Lanzando simulador en subproceso: %s", " ".join(cmd))
-    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, bufsize=1)
-    
-    try:
-        assert proc.stdout is not None
-        for line in proc.stdout:
-            yield line
-    finally:
-        if proc.poll() is None:
-            proc.terminate()
-            proc.wait(timeout=2)
+
+    backoff = initial_backoff
+
+    while True:
+        logger.info("Lanzando simulador en subproceso: %s", " ".join(cmd))
+        proc: Optional[subprocess.Popen[str]] = None
+        try:
+            proc = subprocess.Popen(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                bufsize=1
+            )
+
+            assert proc.stdout is not None
+            for line in proc.stdout:
+                backoff = initial_backoff  # Reset de backoff ante recepción de tramas
+                yield line
+
+            # Al agotarse stdout (EOF), esperar a que el subproceso termine y leer stderr
+            try:
+                ret_code = proc.wait(timeout=2)
+            except subprocess.TimeoutExpired:
+                logger.warning("El simulador no finalizó a tiempo tras cerrar stdout; forzando kill...")
+                proc.kill()
+                ret_code = proc.wait(timeout=1)
+
+            stderr_output = ""
+            if proc.stderr is not None:
+                try:
+                    stderr_output = proc.stderr.read()
+                except Exception as err:
+                    logger.debug("Error leyendo stderr del simulador: %s", err)
+
+            if ret_code != 0:
+                logger.error(
+                    "El subproceso del simulador finalizó con código de error %d. Stderr: %s",
+                    ret_code,
+                    stderr_output.strip() or "(vacío)"
+                )
+            else:
+                logger.warning(
+                    "El subproceso del simulador terminó (código 0). Stderr: %s",
+                    stderr_output.strip() or "(vacío)"
+                )
+
+        except Exception as e:
+            logger.error("Error al ejecutar o comunicar con el subproceso del simulador: %s", e)
+            if proc and proc.stderr:
+                try:
+                    err = proc.stderr.read()
+                    if err:
+                        logger.error("Stderr del simulador: %s", err.strip())
+                except Exception:
+                    pass
+        finally:
+            if proc:
+                if proc.stdout:
+                    try:
+                        proc.stdout.close()
+                    except Exception:
+                        pass
+                if proc.stderr:
+                    try:
+                        proc.stderr.close()
+                    except Exception:
+                        pass
+                if proc.poll() is None:
+                    try:
+                        proc.terminate()
+                        proc.wait(timeout=2)
+                    except Exception:
+                        pass
+
+        logger.info("Reintentando lanzar simulador en %.1f segundos...", backoff)
+        time.sleep(backoff)
+        backoff = min(backoff * 2.0, max_backoff)
 
 
 def stream_serial_with_reconnect(port: str, baudrate: int = 115200) -> Iterator[str]:
@@ -216,13 +304,25 @@ def stream_serial_with_reconnect(port: str, baudrate: int = 115200) -> Iterator[
 # Bucle Principal de Telemetría
 # ==============================================================================
 
-def run_bridge(source_spec: str, influx: InfluxWriter, sim_speed: float = 1.0) -> None:
+def run_bridge(
+    source_spec: str,
+    influx: InfluxWriter,
+    sim_speed: float = 1.0,
+    config_path: Optional[Path | str] = None,
+    log_interval: int = 30,
+) -> None:
     """Orquesta la lectura, timestamping y persistencia hacia InfluxDB."""
+    resolved_config = Path(config_path) if config_path else DEFAULT_CONFIG_PATH
+
     if source_spec == "stdin":
         lines_iterator = stream_stdin()
     elif source_spec.startswith("sim"):
         args = ["--speed", str(sim_speed)]
-        lines_iterator = stream_simulator("edge/simulator.py", extra_args=args)
+        lines_iterator = stream_simulator(
+            sim_script=DEFAULT_SIM_PATH,
+            config_path=resolved_config,
+            extra_args=args
+        )
     elif source_spec.startswith("serial:"):
         parts = source_spec[len("serial:"):].split(":")
         port = parts[0]
@@ -233,6 +333,8 @@ def run_bridge(source_spec: str, influx: InfluxWriter, sim_speed: float = 1.0) -
         sys.exit(1)
 
     logger.info("Iniciando pipeline de bridge hacia InfluxDB org='%s', bucket='%s'", influx.org, influx.bucket)
+
+    success_count = 0
 
     for raw_line in lines_iterator:
         line = raw_line.strip()
@@ -262,7 +364,8 @@ def run_bridge(source_spec: str, influx: InfluxWriter, sim_speed: float = 1.0) -
 
         success = influx.write_line_protocol(influx_line)
         if success:
-            logger.info(
+            success_count += 1
+            logger.debug(
                 "[%s] Ingesta seq=%d | Tanque A: %s%% (%.1fg) | Tanque B: %s%% (%.1fg) | Bomba: %s | Q: %.2f L/min",
                 iso_time,
                 payload.get("seq", 0),
@@ -273,6 +376,17 @@ def run_bridge(source_spec: str, influx: InfluxWriter, sim_speed: float = 1.0) -
                 payload.get("actuators", {}).get("pump"),
                 payload.get("flow_lpm", 0.0)
             )
+            if log_interval > 0 and success_count % log_interval == 0:
+                logger.info(
+                    "[%s] InfluxDB: %d escrituras exitosas acumuladas (última seq=%d | Tanque A: %s%% | Tanque B: %s%% | Bomba: %s | Q: %.2f L/min)",
+                    iso_time,
+                    success_count,
+                    payload.get("seq", 0),
+                    payload.get("tank_a", {}).get("level_pct"),
+                    payload.get("tank_b", {}).get("level_pct"),
+                    payload.get("actuators", {}).get("pump"),
+                    payload.get("flow_lpm", 0.0)
+                )
         else:
             logger.debug("No se pudo persistir la trama seq=%s en InfluxDB", payload.get("seq"))
 
@@ -283,6 +397,12 @@ def main() -> None:
                         help="Fuente de datos: 'sim', 'stdin', o 'serial:<puerto>[:baud]' (ej: 'serial:COM3')")
     parser.add_argument("--sim-speed", type=float, default=1.0,
                         help="Multiplicador de velocidad si se usa --source sim (ej: 5.0)")
+    parser.add_argument("--config", type=str, default=str(DEFAULT_CONFIG_PATH),
+                        help="Ruta al archivo config.yaml (default: relativo a la ubicación del script)")
+    parser.add_argument("--log-every", type=int, default=30,
+                        help="Frecuencia de escrituras exitosas para emitir log INFO (default: 30)")
+    parser.add_argument("--verbose", action="store_true",
+                        help="Habilita logs detallados por cada trama a nivel DEBUG")
     parser.add_argument("--influx-url", type=str,
                         default=os.environ.get("INFLUX_URL", "http://localhost:8086"),
                         help="URL base de InfluxDB 2.x (default: http://localhost:8086)")
@@ -298,6 +418,9 @@ def main() -> None:
 
     args = parser.parse_args()
 
+    if args.verbose:
+        logger.setLevel(logging.DEBUG)
+
     influx = InfluxWriter(
         url=args.influx_url,
         token=args.influx_token,
@@ -306,7 +429,13 @@ def main() -> None:
     )
 
     try:
-        run_bridge(args.source, influx, sim_speed=args.sim_speed)
+        run_bridge(
+            args.source,
+            influx,
+            sim_speed=args.sim_speed,
+            config_path=args.config,
+            log_interval=args.log_every
+        )
     except KeyboardInterrupt:
         logger.info("Bridge detenido limpiamente por el usuario.")
 

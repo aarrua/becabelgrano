@@ -23,6 +23,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict
 
+BASE_DIR = Path(__file__).resolve().parent
+DEFAULT_CONFIG_PATH = BASE_DIR / "config.yaml"
+
 
 # ==============================================================================
 # Modelos de Datos y Estado Físico
@@ -375,7 +378,7 @@ def stdin_listener(state: SimulatorState) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Simulador Didáctico de Tanques (UTN FRSF)")
-    parser.add_argument("--config", type=str, default="edge/config.yaml", help="Ruta al archivo config.yaml")
+    parser.add_argument("--config", type=str, default=str(DEFAULT_CONFIG_PATH), help="Ruta al archivo config.yaml")
     parser.add_argument("--speed", type=float, default=1.0, help="Multiplicador de velocidad de simulación (ej: 5.0)")
     parser.add_argument("--interval", type=float, default=1.0, help="Intervalo real de emisión en segundos (default 1.0)")
     parser.add_argument("--pump-on", action="store_true", help="Inicia la simulación con la bomba encendida")
