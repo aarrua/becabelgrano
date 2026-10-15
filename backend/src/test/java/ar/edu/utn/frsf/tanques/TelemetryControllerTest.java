@@ -43,13 +43,30 @@ class TelemetryControllerTest {
                 .andExpect(jsonPath("$.v", is(1)))
                 .andExpect(jsonPath("$.seq", greaterThanOrEqualTo(1)))
                 .andExpect(jsonPath("$.uptime_ms", greaterThanOrEqualTo(0)))
-                .andExpect(jsonPath("$.tank_a.level_pct", notNullValue()))
                 .andExpect(jsonPath("$.tank_a.weight_g", notNullValue()))
+                .andExpect(jsonPath("$.tank_a.level_pct", notNullValue()))
                 .andExpect(jsonPath("$.tank_a.temp_c", notNullValue()))
+                .andExpect(jsonPath("$.tank_b.weight_g", notNullValue()))
                 .andExpect(jsonPath("$.tank_b.level_pct", notNullValue()))
+                .andExpect(jsonPath("$.tank_b.temp_c", notNullValue()))
                 .andExpect(jsonPath("$.actuators.pump", notNullValue()))
                 .andExpect(jsonPath("$.alarms.overflow_a", notNullValue()))
                 .andExpect(jsonPath("$.mode", is("auto")));
+    }
+
+    @Test
+    void tankAAndTankBMustContainNonNullWeightLevelAndTemperature() throws Exception {
+        String token = obtainToken("alumno", "alumno123");
+
+        mockMvc.perform(get("/api/telemetry/latest")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.tank_a.weight_g", greaterThanOrEqualTo(0.0)))
+                .andExpect(jsonPath("$.tank_a.level_pct", greaterThanOrEqualTo(0.0)))
+                .andExpect(jsonPath("$.tank_a.temp_c", greaterThan(0.0)))
+                .andExpect(jsonPath("$.tank_b.weight_g", greaterThanOrEqualTo(0.0)))
+                .andExpect(jsonPath("$.tank_b.level_pct", greaterThanOrEqualTo(0.0)))
+                .andExpect(jsonPath("$.tank_b.temp_c", greaterThan(0.0)));
     }
 
     private String obtainToken(String username, String password) throws Exception {
