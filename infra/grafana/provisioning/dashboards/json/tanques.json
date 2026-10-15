@@ -172,26 +172,42 @@
           "mappings": [
             {
               "options": {
-                "false": {
+                "0": {
                   "color": "#6b7280",
                   "index": 1,
                   "text": "APAGADA"
                 },
-                "true": {
+                "1": {
                   "color": "#10b981",
                   "index": 0,
                   "text": "ENCENDIDA"
                 }
               },
               "type": "value"
+            },
+            {
+              "options": {
+                "match": "null",
+                "result": {
+                  "color": "#6b7280",
+                  "index": 2,
+                  "text": "SIN DATOS"
+                }
+              },
+              "type": "special"
             }
           ],
+          "noValue": "SIN DATOS",
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {
                 "color": "#6b7280",
                 "value": null
+              },
+              {
+                "color": "#10b981",
+                "value": 1
               }
             ]
           }
@@ -226,7 +242,7 @@
             "type": "influxdb",
             "uid": "InfluxDB_Tanques"
           },
-          "query": "from(bucket: \"tanques\")\n  |> range(start: -5m)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"telemetry\")\n  |> filter(fn: (r) => r[\"_field\"] == \"pump\")\n  |> last()",
+          "query": "from(bucket: \"tanques\")\n  |> range(start: -5m)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"telemetry\")\n  |> filter(fn: (r) => r[\"_field\"] == \"pump\")\n  |> map(fn: (r) => ({ r with _value: if r._value then 1 else 0 }))\n  |> last()",
           "refId": "A"
         }
       ],
@@ -305,24 +321,42 @@
           "mappings": [
             {
               "options": {
-                "false": {
+                "0": {
                   "color": "#10b981",
-                  "text": "NORMAL"
+                  "index": 0,
+                  "text": "OK"
                 },
-                "true": {
+                "1": {
                   "color": "#ef4444",
-                  "text": "ALARMA CRÍTICA"
+                  "index": 1,
+                  "text": "ALARMA"
                 }
               },
               "type": "value"
+            },
+            {
+              "options": {
+                "match": "null",
+                "result": {
+                  "color": "#6b7280",
+                  "index": 2,
+                  "text": "SIN DATOS"
+                }
+              },
+              "type": "special"
             }
           ],
+          "noValue": "SIN DATOS",
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "#10b981",
                 "value": null
+              },
+              {
+                "color": "#ef4444",
+                "value": 1
               }
             ]
           }
@@ -357,7 +391,7 @@
             "type": "influxdb",
             "uid": "InfluxDB_Tanques"
           },
-          "query": "from(bucket: \"tanques\")\n  |> range(start: -5m)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"telemetry\")\n  |> filter(fn: (r) => r[\"_field\"] == \"overflow_a\" or r[\"_field\"] == \"overflow_b\")\n  |> last()",
+          "query": "from(bucket: \"tanques\")\n  |> range(start: -5m)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"telemetry\")\n  |> filter(fn: (r) => r[\"_field\"] == \"overflow_a\" or r[\"_field\"] == \"overflow_b\")\n  |> map(fn: (r) => ({ r with _value: if r._value then 1 else 0 }))\n  |> last()\n  |> group()\n  |> max()",
           "refId": "A"
         }
       ],
