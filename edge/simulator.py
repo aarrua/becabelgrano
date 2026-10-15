@@ -106,7 +106,7 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         "tau_seconds": 300.0,
     },
     "interlocks": {
-        "overflow_threshold_pct": 95.0,
+        "overflow_threshold_pct": 85.0,
     },
     "noise": {
         "weight_noise_g": 1.2,

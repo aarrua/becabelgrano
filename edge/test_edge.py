@@ -76,6 +76,27 @@ class TestSimulatorPhysics(unittest.TestCase):
         self.assertFalse(self.state.actuators["pump"])
         self.assertTrue(self.state.alarms["overflow_a"])
 
+    def test_full_cycle_pumping_with_85_threshold_keeps_tanks_below_99_pct(self):
+        self.state.overflow_threshold_pct = 85.0
+        self.state.tank_a.volume_ml = self.state.tank_a.volume_max_ml * 0.15
+        self.state.tank_b.volume_ml = self.state.tank_b.volume_max_ml * 0.10
+        self.state.actuators["pump"] = True
+
+        max_a = 0.0
+        max_b = 0.0
+        for _ in range(5000):
+            step_physics(self.state, dt=0.1)
+            pct_a = self.state.tank_a.level_pct
+            pct_b = self.state.tank_b.level_pct
+            if pct_a > max_a:
+                max_a = pct_a
+            if pct_b > max_b:
+                max_b = pct_b
+
+        self.assertFalse(self.state.actuators["pump"])
+        self.assertLess(max_a, 99.0, f"Tanque A superó 99%: {max_a:.2f}%")
+        self.assertLess(max_b, 99.0, f"Tanque B superó 99%: {max_b:.2f}%")
+
     def test_interlock_rejects_pump_command_when_overflow_active(self):
         self.state.alarms["overflow_a"] = True
         self.state.actuators["pump"] = False

@@ -1,0 +1,19 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:tanquesdb;DB_CLOSE_DELAY=-1
+    driverClassName: org.h2.Driver
+    username: sa
+    password: ""
+  h2:
+    console:
+      enabled: false
+  jpa:
+    show-sql: false
+
+tanques:
+  jwt:
+    secret: "dev-secret-key-tanques-utn-frsf-gitda-2025-at-least-32-chars!"
+  auth:
+    default-docente-password: "docente123"
+    default-alumno-password: "alumno123"
+
