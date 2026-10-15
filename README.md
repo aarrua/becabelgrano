@@ -1,12 +1,12 @@
 # Kit Didáctico de Tanques Interconectados (UTN FRSF / GITDA)
 
-Sistema de monitoreo y control web para el kit didáctico de dos tanques acoplados en serie, desarrollado en el marco de proyectos de Industria 4.0 e Internet de las Cosas (IoT) de la Universidad Tecnológica Nacional - Facultad Regional Santa Fe.
+Sistema web integral de monitoreo en tiempo real y control seguro para el kit didáctico de tanques acoplados en serie, desarrollado en el marco de proyectos de Industria 4.0 e Internet de las Cosas (IoT) de la Universidad Tecnológica Nacional - Facultad Regional Santa Fe.
 
 ---
 
 ## 1. Arquitectura General del Sistema
 
-La solución opera de forma autónoma en el borde (*Edge Computing*) sobre una Raspberry Pi, con un único punto de entrada HTTP mediante un reverse proxy **nginx**:
+La solución opera de forma autónoma en el borde (*Edge Computing*) sobre una Raspberry Pi, con un único punto de entrada HTTP expuesto mediante un reverse proxy **nginx**:
 
 ```mermaid
 graph TD
@@ -19,7 +19,7 @@ graph TD
         Influx[("InfluxDB 2.x<br/>(Base Temporal TSDB)")]
         Grafana["Grafana<br/>(Dashboards Kiosk / Viewer)"]
         
-        subgraph BackendSpring ["Backend (Spring Boot 3.x - Java 21)"]
+        subgraph BackendSpring ["Backend (Spring Boot 3.5.x - Java 21)"]
             API["REST Controllers (/api)"]
             Sec["Spring Security (JWT / RBAC)"]
             H2[("H2 Database<br/>(Usuarios & Auditoría)")]
@@ -40,7 +40,7 @@ graph TD
     ESP32 -->|"Serial JSON (115200 bps)"| Bridge
     Bridge -->|"Line Protocol (Write)"| Influx
     Influx -->|"Flux / InfluxQL"| Grafana
-    Influx -.->|"Telemetría Histórica"| TP
+    Influx -.->|"Telemetría Histórica (Prod)"| TP
     TP --> API
 
     %% Flujo Comandos
@@ -62,22 +62,14 @@ graph TD
 
 ---
 
-## 2. Estructura del Repositorio
+## 2. Delimitación de Alcance y Principios de Diseño
 
-```text
-.
-├── AGENTS.md        # Reglas, convenciones y decisiones arquitectónicas para agentes y devs
-├── README.md        # Documento principal del proyecto
-├── docs/            # Documentación técnica en Markdown (compatible con Obsidian)
-│   ├── 01-contrato-datos.md   # Especificación de telemetría y tramas seriales
-│   ├── 02-flujo-comandos.md   # Diagramas de secuencia y mecanismos de seguridad
-│   └── 03-api.md              # Documentación de endpoints REST y OpenAPI
-├── firmware/        # Especificación y código para ESP32
-├── edge/            # Scripts Python para Raspberry Pi (simulador físico y bridge serial)
-├── backend/         # Backend REST en Spring Boot 3 (Java 21, Maven, JWT, H2)
-├── infra/           # Orquestación con Docker Compose (InfluxDB, Grafana, nginx)
-└── frontend/        # Aplicación SPA en React + Vite + TypeScript (Fase 3)
-```
+* **Plataforma Local (Edge Computing)**: El sistema completo se despliega en una Raspberry Pi sin depender de servicios en la nube.
+* **Sin Placas Peltier (Estricto)**: El kit no cuenta con celdas termoeléctricas ni actuadores de control térmico activo. La temperatura registrada es exclusivamente de **monitoreo pasivo**.
+* **Válvulas Manuales**: Las llaves de paso entre los tanques y hacia el reservorio son manuales. No existe sensado ni control automatizado de válvulas.
+* **Interlocks de Seguridad**:
+  * El único actuador gobernado es la bomba de impulsión (`pump`).
+  * Posee corte por hardware/firmware autónomo y corte lógico en software si el nivel de cualquiera de los tanques supera el **85%** (configurable), protegiendo contra sobrellenado originado por la inercia de descarga de A hacia B.
 
 ---
 
@@ -86,12 +78,76 @@ graph TD
 | Fase | Descripción | Estado |
 |---|---|:---:|
 | **Fase 0** | Reglas de repositorio, contratos de datos, flujos de interlock y documentación base | **Completada** |
-| **Fase 1** | Simulador físico de tanques, bridge serial, InfluxDB, Grafana y nginx | *Pendiente* |
-| **Fase 2** | Backend Spring Boot (JWT, roles DOCENTE/ALUMNO, ActuatorGateway, auditoría H2) | *Pendiente* |
-| **Fase 3** | Frontend React SPA (Monitoreo, paneles Grafana embebidos, control seguro) | *Pendiente* |
+| **Fase 1** | Simulador físico de tanques, bridge serial, InfluxDB, Grafana y nginx | **Completada** |
+| **Fase 2** | Backend Spring Boot (JWT, roles DOCENTE/ALUMNO, ActuatorGateway, auditoría H2) | **Completada** |
+| **Fase 3** | Frontend React SPA (Monitoreo, paneles Grafana embebidos, control seguro por roles) | **En Curso** |
+
+Consultá el detalle de cambios históricos en el [CHANGELOG.md](file:///c:/Users/Ale/OneDrive%20-%20UTN%20-%20Santa%20Fe/UTN%202025/Beca%20Belgrano/becabelgrano/CHANGELOG.md).
 
 ---
 
-## 4. Convenciones de Desarrollo
+## 4. Guía de Ejecución Local para Desarrollo (`dev`)
 
-Para consultar las reglas de desarrollo, lineamientos de commits convencionales y alcance técnico, consultar [`AGENTS.md`](file:///c:/Users/Ale/OneDrive%20-%20UTN%20-%20Santa%20Fe/UTN%202025/Beca%20Belgrano/becabelgrano/AGENTS.md).
+Durante el desarrollo no se requiere hardware físico (ESP32) ni componentes externos; cada subsistema puede correrse de manera independiente y desacoplada:
+
+### 4.1 Infraestructura de Datos (InfluxDB + Grafana + Nginx)
+Requiere Docker y Docker Compose:
+```bash
+cd infra
+docker compose up -d
+```
+* **Nginx Gateway**: `http://localhost` (puerto 80)
+* **Grafana**: `http://localhost/grafana` o `http://localhost:3000` (Viewer anónimo activado)
+* **InfluxDB**: `http://localhost:8086` (Org: `utn-frsf`, Bucket: `tanques`)
+
+### 4.2 Simulador Físico y Bridge (Pipeline Edge)
+Requiere Python 3.10+:
+```bash
+# Iniciar bridge consumiendo datos del simulador interno
+python edge/bridge.py --source sim
+
+# O iniciar con la bomba encendida para verificar interlocks de sobrellenado
+python edge/bridge.py --source sim --pump-on
+```
+
+### 4.3 Backend REST (Spring Boot 3.5.x)
+Requiere Java 21 y Maven. En perfil `dev` el backend corre **completamente autónomo** con base de datos H2 en `./data/` y mocks físicos sincronizados:
+```bash
+cd backend
+mvn spring-boot:run -Dspring-boot.run.profiles=dev
+```
+* **API REST**: `http://localhost:8080/api`
+* **Swagger UI / OpenAPI 3**: `http://localhost:8080/swagger-ui.html`
+* **Consola H2**: `http://localhost:8080/h2-console` (`JDBC URL: jdbc:h2:file:./data/tanquesdb`)
+* **Usuarios Semilla en Dev**:
+  * `docente` / `docente123` (rol `DOCENTE`)
+  * `alumno` / `alumno123` (rol `ALUMNO`)
+
+### 4.4 Frontend SPA (React + Vite + TypeScript - Fase 3)
+Requiere Node.js 18+:
+```bash
+cd frontend
+npm install
+npm run dev
+```
+* **Dev Server**: `http://localhost:5173`
+
+---
+
+## 5. Estructura del Repositorio
+
+```text
+.
+├── AGENTS.md        # Reglas, convenciones, arquitectura y pendientes conocidos
+├── CHANGELOG.md     # Registro cronológico de cambios (Keep a Changelog)
+├── README.md        # Documento principal del proyecto
+├── docs/            # Documentación técnica en Markdown (compatible con Obsidian)
+│   ├── 01-contrato-datos.md   # Especificación de telemetría y tramas seriales
+│   ├── 02-flujo-comandos.md   # Diagramas de secuencia y mecanismos de seguridad
+│   └── 03-api.md              # Documentación de endpoints REST y OpenAPI
+├── firmware/        # Especificación y código para ESP32
+├── edge/            # Scripts Python para Raspberry Pi (simulador físico y bridge serial)
+├── backend/         # Backend REST en Spring Boot 3.5.x (Java 21, Maven, JWT, H2)
+├── infra/           # Orquestación con Docker Compose (InfluxDB, Grafana, nginx)
+└── frontend/        # Aplicación SPA en React + Vite + TypeScript (Fase 3)
+```
