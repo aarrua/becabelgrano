@@ -136,7 +136,12 @@ El proyecto avanza estrictamente por fases según lo estipulado:
 Al completar cada fase:
 1. Asegurar que las pruebas y verificaciones manuales indicadas se cumplan.
 2. Realizar los commits correspondientes según Conventional Commits.
-3. Detenerse (*FRENAR*), presentar un resumen ejecutivo de lo construido y esperar la confirmación explícita del usuario para continuar.
+3. **Regla Permanente de Mantenimiento Documental**: Actualizar obligatoriamente `CHANGELOG.md` y, si cambió algo de arquitectura, comandos o pendientes, `README.md` y `AGENTS.md`, en el mismo PR/rama y bajo un commit `docs(repo): ...`.
+4. Detenerse (*FRENAR*), presentar un resumen ejecutivo de lo construido y esperar la confirmación explícita del usuario para continuar.
+
+### 6.1 Regla Permanente de Mantenimiento Documental
+> **REGLA PERMANENTE (CUMPLIMIENTO ESTRICTO):**  
+> Al cerrar cada fase o fix relevante, actualizá `CHANGELOG.md` y, si cambió algo de arquitectura, comandos o pendientes, `README.md` y `AGENTS.md`, en el mismo PR/rama y con commit `docs(repo): ...`.
 
 ---
 
