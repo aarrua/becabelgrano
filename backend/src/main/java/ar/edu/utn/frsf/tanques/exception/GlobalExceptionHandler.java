@@ -31,7 +31,8 @@ public class GlobalExceptionHandler {
                 ackId,
                 ex.getTarget(),
                 ex.isRequestedValue(),
-                ex.getReason()
+                ex.getReason(),
+                ex.getMessage()
         );
         return ResponseEntity.status(HttpStatus.CONFLICT).body(response);
     }

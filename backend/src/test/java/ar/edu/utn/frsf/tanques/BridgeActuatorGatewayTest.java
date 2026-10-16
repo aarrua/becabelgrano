@@ -45,6 +45,7 @@ class BridgeActuatorGatewayTest {
         auditService = mock(AuditService.class);
         objectProvider = mock(ObjectProvider.class);
         telemetryProvider = mock(TelemetryProvider.class);
+        when(telemetryProvider.isTelemetryFresh()).thenReturn(true);
         when(objectProvider.getIfAvailable()).thenReturn(telemetryProvider);
 
         objectMapper = new ObjectMapper();
@@ -290,5 +291,53 @@ class BridgeActuatorGatewayTest {
                 gateway.executeCommand("valvula_inexistente", true, "docente")
         );
         verify(auditService).recordCommand("docente", "valvula_inexistente", true, false, "target_not_found");
+    }
+
+    @Test
+    void testSendCommand_TurnOnWithStaleTelemetry_ThrowsInterlockViolationException() throws Exception {
+        when(telemetryProvider.isTelemetryFresh()).thenReturn(false);
+
+        InterlockViolationException ex = assertThrows(InterlockViolationException.class, () ->
+                gateway.executeCommand("pump", true, "docente")
+        );
+
+        assertEquals("pump", ex.getTarget());
+        assertTrue(ex.isRequestedValue());
+        assertEquals("telemetry_stale", ex.getReason());
+        assertTrue(ex.getMessage().contains("telemetría está desactualizada"));
+
+        // Se audita el rechazo con reason="telemetry_stale"
+        verify(auditService).recordCommand("docente", "pump", true, false, "telemetry_stale");
+        // No se publica ningún mensaje en MQTT
+        verify(mqttClient, never()).publish(anyString(), any(MqttMessage.class));
+    }
+
+    @Test
+    void testSendCommand_TurnOffWithStaleTelemetry_Allowed() throws Exception {
+        // Apagar SIEMPRE está permitido aún con telemetría vieja
+        when(telemetryProvider.isTelemetryFresh()).thenReturn(false);
+
+        doAnswer(invocation -> {
+            MqttMessage msg = invocation.getArgument(1);
+            BridgeCommandMessage cmd = objectMapper.readValue(msg.getPayload(), BridgeCommandMessage.class);
+
+            Executors.newSingleThreadScheduledExecutor().schedule(() -> {
+                try {
+                    String ackJson = "{\"ack\":\"" + cmd.id() + "\",\"ok\":true}";
+                    gateway.messageArrived(ackTopic, new MqttMessage(ackJson.getBytes()));
+                } catch (Exception ignored) {
+                }
+            }, 20, TimeUnit.MILLISECONDS);
+
+            return null;
+        }).when(mqttClient).publish(eq(cmdTopic), any(MqttMessage.class));
+
+        ActuatorCommandResponse res = gateway.executeCommand("pump", false, "docente");
+
+        assertNotNull(res);
+        assertTrue(res.ok());
+        assertFalse(res.value());
+        verify(auditService).recordCommand("docente", "pump", false, true, null);
+        verify(mqttClient).publish(eq(cmdTopic), any(MqttMessage.class));
     }
 }

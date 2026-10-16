@@ -240,6 +240,18 @@ public class BridgeActuatorGateway implements ActuatorGateway, MqttCallbackExten
             throw new ActuatorNotFoundException(normalized);
         }
 
+        // Si se intenta ENCENDER la bomba, se requiere telemetría fresca (< 5 s)
+        if (value) {
+            TelemetryProvider provider = telemetryProvider.getIfAvailable();
+            if (provider != null && !provider.isTelemetryFresh()) {
+                String reason = "telemetry_stale";
+                log.warn("Rechazo de encendido por telemetría desactualizada (> 5 s): target='{}', usuario='{}'", normalized, username);
+                auditService.recordCommand(username, normalized, value, false, reason);
+                throw new InterlockViolationException(normalized, value, reason,
+                        "No se puede encender el actuador: la telemetría está desactualizada (> 5 s) y el estado físico del equipo no está verificado");
+            }
+        }
+
         String cmdId = "c_" + UUID.randomUUID().toString().replace("-", "").substring(0, 8);
         long nowMs = System.currentTimeMillis();
         BridgeCommandMessage cmdMsg = new BridgeCommandMessage(cmdId, "set", normalized, value, nowMs);

@@ -147,6 +147,7 @@ export function MonitorView() {
         flowLpm={telemetry?.flow_lpm ?? 0}
         isInterlockBlocked={isInterlockBlocked}
         interlockReason={interlockReason}
+        isTelemetryStale={isStale}
       />
 
       {/* Dashboard Grafana Embebido */}

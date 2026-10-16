@@ -10,10 +10,14 @@ interface PumpControlProps {
   flowLpm?: number
   isInterlockBlocked?: boolean
   interlockReason?: string
+  isTelemetryStale?: boolean
 }
 
 function mapInterlockReason(reason?: string): string {
   if (!reason) return 'Comando rechazado por interlock de seguridad'
+  if (reason.toLowerCase().includes('telemetry_stale')) {
+    return 'Encendido bloqueado: telemetría desactualizada (> 5 s) y estado no verificado'
+  }
   if (reason.toLowerCase().includes('overflow_a')) {
     return 'Interlock de sobrellenado activo: Nivel crítico en Tanque A (> 85%)'
   }
@@ -31,6 +35,7 @@ export function PumpControl({
   flowLpm = 0,
   isInterlockBlocked = false,
   interlockReason,
+  isTelemetryStale = false,
 }: PumpControlProps) {
   const { role } = useAuth()
   const queryClient = useQueryClient()
@@ -145,11 +150,11 @@ export function PumpControl({
             </div>
           )}
 
-          {isUnknown && (
+          {(isUnknown || isTelemetryStale) && (
             <div className="alert-unknown-warning">
               <AlertTriangleIcon width="16" height="16" />
               <span>
-                Estado de bomba no confirmado (sin telemetría reciente &gt; 5 s). Puede emitir comandos de control directamente al equipo.
+                <strong>Estado de bomba no confirmado:</strong> Telemetría desactualizada (&gt; 5 s). El encendido requiere telemetría fresca y está deshabilitado por seguridad. Solo está habilitado el apagado preventivo.
               </span>
             </div>
           )}
@@ -158,17 +163,18 @@ export function PumpControl({
             {isUnknown ? (
               <div className="pump-buttons-dual">
                 <button
-                  onClick={() => handleAction(true)}
-                  disabled={mutation.isPending || isInterlockBlocked}
+                  disabled={true}
                   className="btn-pump-toggle btn-pump-start"
+                  title="Encendido deshabilitado: requiere telemetría fresca (< 5 s)"
                 >
                   <PumpIcon width="18" height="18" />
-                  <span>{mutation.isPending ? 'Transmitiendo...' : 'Forzar Encendido'}</span>
+                  <span>Encender Bomba</span>
                 </button>
                 <button
                   onClick={() => handleAction(false)}
                   disabled={mutation.isPending}
                   className="btn-pump-toggle btn-pump-stop"
+                  title="Forzar apagado preventivo"
                 >
                   <PumpIcon width="18" height="18" />
                   <span>{mutation.isPending ? 'Transmitiendo...' : 'Forzar Apagado'}</span>
@@ -177,8 +183,16 @@ export function PumpControl({
             ) : (
               <button
                 onClick={() => handleAction(!currentPumpState)}
-                disabled={mutation.isPending || (isInterlockBlocked && !currentPumpState)}
+                disabled={
+                  mutation.isPending ||
+                  (!currentPumpState && (isInterlockBlocked || isTelemetryStale))
+                }
                 className={`btn-pump-toggle ${currentPumpState ? 'btn-pump-stop' : 'btn-pump-start'}`}
+                title={
+                  !currentPumpState && isTelemetryStale
+                    ? 'Encendido deshabilitado: requiere telemetría fresca (< 5 s)'
+                    : undefined
+                }
               >
                 <PumpIcon width="18" height="18" />
                 <span>
