@@ -36,7 +36,7 @@ La arquitectura general está definida y no debe alterarse:
    - **Cliente MQTT**: `org.eclipse.paho:org.eclipse.paho.client.mqttv3:1.2.5` fijada exacta.
      > *Decisión arquitectónica consciente*: La línea Paho Java v3 (`1.2.5`) está madura y altamente estable en producción, aunque no tiene nuevos releases desde julio de 2020 (existe `org.eclipse.paho:org.eclipse.paho.mqttv5.client`, a reevaluar a futuro). Spring Integration MQTT se descartó conscientemente por simplicidad (evita sobrecarga de abstracciones de mensajería para dos tópicos fijos), no porque Paho no sea necesaria.
    - Seguridad con JWT stateless. Roles: `DOCENTE` (permisos de control de actuadores y auditoría) y `ALUMNO` (solo lectura).
-   - Persistencia de usuarios y eventos de auditoría en base de datos H2 en disco (`./data/tanquesdb` con `AUTO_SERVER=TRUE`).
+   - Persistencia de usuarios y eventos de auditoría en base de datos H2 en disco (`./data/tanquesdb` con `AUTO_SERVER=TRUE`). La columna `target` en la entidad de auditoría posee valor por defecto `'pump'` (`columnDefinition = "varchar(64) default 'pump'"`) para compatibilidad retroactiva con registros previos a la migración.
    - Documentación viva de endpoints mediante OpenAPI 3 expuesta en `/swagger-ui.html` y `/v3/api-docs`.
    - Aislamiento de perfiles: en perfil `dev` el backend corre localmente **sin Docker y sin ESP32** (con mocks en memoria sincronizados).
 5. **Timestamping**:
@@ -56,6 +56,7 @@ La arquitectura general está definida y no debe alterarse:
      - **Ciclo de vida sin fugas**: El mapa de comandos en vuelo (`pendingAcks`) se limpia en bloque `finally` tanto al resolver exitosamente como al agotarse el timeout o fallar la espera.
      - **Arranque tolerante a fallas**: El backend no bloquea su inicio si Mosquitto está temporalmente caído (reintentos en hilo daemon background); mientras no hay conexión, responde HTTP 503 (`reason: "bridge_unavailable"`).
      - **Manejo de estado desconocido**: Un timeout (3 s), `device_timeout` o `expired` retorna 503 informando estado desconocido. `getActuatorsState()` deriva el estado de la última telemetría en InfluxDB; si transcurrieron más de 5 segundos sin tramas, el actuador se reporta como `null` (desconocido), previniendo asumir falsamente que el actuador está apagado.
+     - **Restricción de encendido ante telemetría obsoleta**: Si la telemetría no es reciente ($> 5$ s), cualquier intento de encendido (`value: true`) es rechazado de inmediato con HTTP 409 Conflict (`reason: "telemetry_stale"`), impidiendo activar actuadores a ciegas; el apagado (`value: false`) permanece siempre permitido por seguridad física.
 9. **Umbral de Interlock de Sobrellenado**:
    - Configurado por defecto a **`85.0%`** (`overflow_threshold_pct: 85.0`) tanto en `edge/config.yaml` como en `application.yml`.
    - Permite compensar la inercia del volumen que continúa descargando el Tanque A hacia el Tanque B una vez apagada la bomba, garantizando que el Tanque B no supere el 99% de capacidad.
@@ -183,10 +184,10 @@ Al completar cada fase:
    La apertura manual de la llave de interconexión Tanque A $\to$ Tanque B altera la tasa de descarga por gravedad y la altura máxima acumulada en B. En la puesta en marcha con hardware se debe calibrar el umbral y considerar un interlock de corte por volumen total combinado ($V_A + V_B$).
 6. **Formato de Gauges en Grafana**:
    Los gauges del dashboard provisionado muestran actualmente valores como `0.100%`. Se debe configurar `Decimals = 1` en el JSON del dashboard (`infra/grafana/provisioning/dashboards/tanques-dashboard.json`).
-7. **Etiqueta dinámica de conexión ESP32 en la SPA**:
-   **Completado en Fase 4 (Etapa 3)**. La SPA calcula dinámicamente el estado a partir de la antigüedad de la telemetría (`dataUpdatedAt`), mostrando "ESP32 Conectado" (verde), "Sin datos recientes" (ámbar, $>5$ s) o "ESP32 Desconectado" (rojo, $>10$ s o error).
+7. **Etiqueta dinámica de conexión del equipo en la SPA**:
+   **Completado en Fase 4 (Etapa 3)**. La SPA calcula dinámicamente el estado a partir de la antigüedad de la telemetría (`dataUpdatedAt`), mostrando "Equipo Conectado" (verde), "Sin datos recientes" (ámbar, $>5$ s) o "Equipo Desconectado" (rojo, $>10$ s o error).
 8. **Registro de auditoría no incluye `target`**:
-   **Completado en Fase 4 (Etapa 3)**. Incorporado en base de datos H2 (`columnDefinition = "varchar(64) default 'pump'"`), DTOs de auditoría y renderizado en columna de la SPA con tipo seguro.
+   **Completado en Fase 4 (Etapa 3)**. Incorporado en base de datos H2 con definición de columna `columnDefinition = "varchar(64) default 'pump'"` (garantizando compatibilidad retroactiva con registros previos a la migración), DTOs de auditoría y renderizado en columna de la SPA con tipo seguro.
 9. **Verificación del diseño en vista de celular**:
    El diseño responsivo para móviles quedó implementado con media queries y testeado funcionalmente, pero no se probó visualmente en un dispositivo físico real.
 
