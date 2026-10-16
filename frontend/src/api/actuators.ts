@@ -1,8 +1,8 @@
 import { apiClient } from './client'
 import { ActuatorCommandResponse } from '../types/telemetry'
 
-export async function fetchActuators(): Promise<Record<string, boolean>> {
-  return apiClient<Record<string, boolean>>('/api/actuators', {
+export async function fetchActuators(): Promise<Record<string, boolean | null>> {
+  return apiClient<Record<string, boolean | null>>('/api/actuators', {
     method: 'GET',
   })
 }

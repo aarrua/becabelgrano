@@ -19,7 +19,7 @@ function formatUptime(ms: number): string {
 export function MonitorView() {
   const refetchInterval = Number(import.meta.env.VITE_TELEMETRY_REFETCH_INTERVAL_MS) || 2000
 
-  const { data: telemetry, isLoading, error } = useQuery({
+  const { data: telemetry, isLoading, error, dataUpdatedAt } = useQuery({
     queryKey: ['telemetry', 'latest'],
     queryFn: fetchLatestTelemetry,
     refetchInterval,
@@ -44,9 +44,15 @@ export function MonitorView() {
     )
   }
 
+  // Antigüedad y frescura de la telemetría
+  const now = Date.now()
+  const ageMs = dataUpdatedAt ? now - dataUpdatedAt : Infinity
+  const isDisconnected = Boolean(error) || !telemetry || ageMs > 10000
+  const isStale = !isDisconnected && (ageMs > 5000 || telemetry?.actuators?.['pump'] === null)
+
   const alarms = telemetry?.alarms ?? {}
   const hasAlarms = Boolean(alarms['overflow_a'] || alarms['overflow_b'] || alarms['sensor_fault'])
-  const pumpState = Boolean(telemetry?.actuators?.['pump'])
+  const pumpState = telemetry?.actuators?.['pump'] ?? null
   
   const tankALevel = telemetry?.tank_a?.level_pct ?? 0
   const tankBLevel = telemetry?.tank_b?.level_pct ?? 0
@@ -64,8 +70,18 @@ export function MonitorView() {
       <section className="telemetry-bar">
         <div className="telemetry-bar-group">
           <div className="status-indicator">
-            <span className="status-dot dot-online" />
-            <span className="status-label">ESP32 Conectado</span>
+            <span
+              className={`status-dot ${
+                isDisconnected ? 'dot-offline' : isStale ? 'dot-stale' : 'dot-online'
+              }`}
+            />
+            <span className="status-label">
+              {isDisconnected
+                ? 'ESP32 Desconectado'
+                : isStale
+                ? 'Sin datos recientes'
+                : 'ESP32 Conectado'}
+            </span>
           </div>
 
           <div className="telemetry-badge">

@@ -6,7 +6,7 @@ import { PumpIcon, FlowIcon, LockIcon, AlertTriangleIcon, CheckCircleIcon } from
 import { ApiError } from '../types/telemetry'
 
 interface PumpControlProps {
-  currentPumpState: boolean
+  currentPumpState: boolean | null
   flowLpm?: number
   isInterlockBlocked?: boolean
   interlockReason?: string
@@ -50,7 +50,7 @@ export function PumpControl({
       if (err.status === 503 || err.reason === 'bridge_unavailable') {
         setFeedback({
           type: 'error',
-          message: 'Control no disponible: sin conexión con el equipo',
+          message: err.message || 'Control no disponible: sin conexión con el equipo',
         })
       } else if (err.status === 409) {
         setFeedback({
@@ -72,10 +72,12 @@ export function PumpControl({
   })
 
   const isDocente = role === 'DOCENTE'
+  const isRunning = currentPumpState === true
+  const isStopped = currentPumpState === false
+  const isUnknown = currentPumpState === null
 
-  const handleToggle = () => {
+  const handleAction = (targetState: boolean) => {
     setFeedback(null)
-    const targetState = !currentPumpState
     mutation.mutate(targetState)
   }
 
@@ -83,7 +85,11 @@ export function PumpControl({
     <div className="pump-control-card">
       <div className="pump-control-header">
         <div className="pump-header-title">
-          <div className={`pump-icon-avatar ${currentPumpState ? 'avatar-running' : 'avatar-stopped'}`}>
+          <div
+            className={`pump-icon-avatar ${
+              isRunning ? 'avatar-running' : isStopped ? 'avatar-stopped' : 'avatar-unknown'
+            }`}
+          >
             <PumpIcon width="24" height="24" />
           </div>
           <div>
@@ -104,9 +110,14 @@ export function PumpControl({
             <span className="flow-badge-unit">L/min</span>
           </div>
 
-          <span className={`pump-state-pill ${currentPumpState ? 'state-on' : 'state-off'}`}>
+          <span
+            className={`pump-state-pill ${
+              isRunning ? 'state-on' : isStopped ? 'state-off' : 'state-unknown'
+            }`}
+            title={isUnknown ? 'Sin telemetría reciente (> 5 s). Verifique la conexión con el equipo.' : undefined}
+          >
             <span className="state-dot" />
-            {currentPumpState ? 'ENCENDIDA' : 'APAGADA'}
+            {isRunning ? 'ENCENDIDA' : isStopped ? 'APAGADA' : 'DESCONOCIDO'}
           </span>
         </div>
       </div>
@@ -125,7 +136,7 @@ export function PumpControl({
       {/* Panel para rol DOCENTE (con botonera interactiva) */}
       {isDocente && (
         <div className="pump-actions-area">
-          {isInterlockBlocked && !currentPumpState && (
+          {isInterlockBlocked && !isRunning && (
             <div className="alert-interlock-warning">
               <AlertTriangleIcon width="16" height="16" />
               <span>
@@ -134,21 +145,51 @@ export function PumpControl({
             </div>
           )}
 
-          <div className="pump-button-row">
-            <button
-              onClick={handleToggle}
-              disabled={mutation.isPending || (isInterlockBlocked && !currentPumpState)}
-              className={`btn-pump-toggle ${currentPumpState ? 'btn-pump-stop' : 'btn-pump-start'}`}
-            >
-              <PumpIcon width="18" height="18" />
+          {isUnknown && (
+            <div className="alert-unknown-warning">
+              <AlertTriangleIcon width="16" height="16" />
               <span>
-                {mutation.isPending
-                  ? 'Transmitiendo comando...'
-                  : currentPumpState
-                  ? 'Apagar Bomba'
-                  : 'Encender Bomba'}
+                Estado de bomba no confirmado (sin telemetría reciente &gt; 5 s). Puede emitir comandos de control directamente al equipo.
               </span>
-            </button>
+            </div>
+          )}
+
+          <div className="pump-button-row">
+            {isUnknown ? (
+              <div className="pump-buttons-dual">
+                <button
+                  onClick={() => handleAction(true)}
+                  disabled={mutation.isPending || isInterlockBlocked}
+                  className="btn-pump-toggle btn-pump-start"
+                >
+                  <PumpIcon width="18" height="18" />
+                  <span>{mutation.isPending ? 'Transmitiendo...' : 'Forzar Encendido'}</span>
+                </button>
+                <button
+                  onClick={() => handleAction(false)}
+                  disabled={mutation.isPending}
+                  className="btn-pump-toggle btn-pump-stop"
+                >
+                  <PumpIcon width="18" height="18" />
+                  <span>{mutation.isPending ? 'Transmitiendo...' : 'Forzar Apagado'}</span>
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => handleAction(!currentPumpState)}
+                disabled={mutation.isPending || (isInterlockBlocked && !currentPumpState)}
+                className={`btn-pump-toggle ${currentPumpState ? 'btn-pump-stop' : 'btn-pump-start'}`}
+              >
+                <PumpIcon width="18" height="18" />
+                <span>
+                  {mutation.isPending
+                    ? 'Transmitiendo comando...'
+                    : currentPumpState
+                    ? 'Apagar Bomba'
+                    : 'Encender Bomba'}
+                </span>
+              </button>
+            )}
           </div>
 
           {feedback && (
