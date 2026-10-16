@@ -14,7 +14,7 @@ public class CommandAuditEvent {
     @Column(nullable = false, length = 64)
     private String username;
 
-    @Column(nullable = false, length = 64)
+    @Column(nullable = false, length = 64, columnDefinition = "varchar(64) default 'pump'")
     private String target;
 
     @Column(nullable = false)

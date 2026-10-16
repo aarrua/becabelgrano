@@ -33,5 +33,13 @@ tanques:
       volume-max-ml: 2450.0
   interlocks:
     overflow-threshold-pct: 85.0
+  mqtt:
+    host: ${MQTT_HOST:localhost}
+    port: ${MQTT_PORT:1883}
+    user: ${MQTT_USER:tanques}
+    password: ${MQTT_PASSWORD:}
+    cmd-topic: ${MQTT_CMD_TOPIC:tanques/cmd}
+    ack-topic: ${MQTT_ACK_TOPIC:tanques/ack}
+    timeout-ms: ${MQTT_TIMEOUT_MS:3000}
 
 

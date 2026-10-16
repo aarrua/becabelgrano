@@ -14,6 +14,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
+import java.time.Instant;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -26,6 +27,7 @@ public class InfluxTelemetryProvider implements TelemetryProvider {
 
     private final InfluxDBClient influxDBClient;
     private final String bucket;
+    private volatile Instant lastTelemetryTimestamp = null;
 
     public InfluxTelemetryProvider(
             @Value("${tanques.influx.url:http://localhost:8086}") String url,
@@ -35,6 +37,19 @@ public class InfluxTelemetryProvider implements TelemetryProvider {
     ) {
         this.bucket = bucket;
         this.influxDBClient = InfluxDBClientFactory.create(url, token.toCharArray(), org, bucket);
+    }
+
+    @Override
+    public boolean isTelemetryFresh() {
+        Instant ts = lastTelemetryTimestamp;
+        if (ts == null) {
+            return false;
+        }
+        return Math.abs(java.time.Duration.between(ts, Instant.now()).toMillis()) <= 5000;
+    }
+
+    public Instant getLastTelemetryTimestamp() {
+        return lastTelemetryTimestamp;
     }
 
     @Override
@@ -54,6 +69,7 @@ public class InfluxTelemetryProvider implements TelemetryProvider {
             QueryApi queryApi = influxDBClient.getQueryApi();
             List<FluxTable> tables = queryApi.query(flux);
 
+            Instant newestRecordTime = null;
             for (FluxTable table : tables) {
                 for (FluxRecord record : table.getRecords()) {
                     String field = record.getField();
@@ -61,11 +77,17 @@ public class InfluxTelemetryProvider implements TelemetryProvider {
                     if (field != null) {
                         fields.put(field, value);
                     }
+                    if (record.getTime() != null) {
+                        if (newestRecordTime == null || record.getTime().isAfter(newestRecordTime)) {
+                            newestRecordTime = record.getTime();
+                        }
+                    }
                     if (record.getValueByKey("mode") != null) {
                         mode = record.getValueByKey("mode").toString();
                     }
                 }
             }
+            this.lastTelemetryTimestamp = newestRecordTime;
         } catch (Exception e) {
             log.error("Error consultando última telemetría en InfluxDB: {}", e.getMessage());
         }
@@ -88,7 +110,11 @@ public class InfluxTelemetryProvider implements TelemetryProvider {
         double flowLpm = parseDouble(fields.get("flow_lpm"), 0.0);
 
         Map<String, Boolean> actuators = new HashMap<>();
-        actuators.put("pump", parseBoolean(fields.get("pump")));
+        if (isTelemetryFresh() && fields.containsKey("pump")) {
+            actuators.put("pump", parseBoolean(fields.get("pump")));
+        } else {
+            actuators.put("pump", null);
+        }
 
         Map<String, Boolean> alarms = new HashMap<>();
         alarms.put("overflow_a", parseBoolean(fields.get("overflow_a")));

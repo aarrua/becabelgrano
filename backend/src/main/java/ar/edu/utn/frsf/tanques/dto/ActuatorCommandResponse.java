@@ -21,13 +21,24 @@ public record ActuatorCommandResponse(
         Boolean value,
 
         @Schema(description = "Timestamp oficial del procesamiento")
-        Instant timestamp
+        Instant timestamp,
+
+        @Schema(description = "Mensaje informativo o de diagnóstico sobre el estado del comando", example = "Estado desconocido, verificar telemetría")
+        String message
 ) {
+    public ActuatorCommandResponse(String ack, boolean ok, String reason, String target, Boolean value, Instant timestamp) {
+        this(ack, ok, reason, target, value, timestamp, null);
+    }
+
     public static ActuatorCommandResponse success(String ack, String target, boolean value) {
-        return new ActuatorCommandResponse(ack, true, null, target, value, Instant.now());
+        return new ActuatorCommandResponse(ack, true, null, target, value, Instant.now(), null);
     }
 
     public static ActuatorCommandResponse rejected(String ack, String target, boolean value, String reason) {
-        return new ActuatorCommandResponse(ack, false, reason, target, value, Instant.now());
+        return new ActuatorCommandResponse(ack, false, reason, target, value, Instant.now(), null);
+    }
+
+    public static ActuatorCommandResponse rejected(String ack, String target, boolean value, String reason, String message) {
+        return new ActuatorCommandResponse(ack, false, reason, target, value, Instant.now(), message);
     }
 }
