@@ -1,15 +1,16 @@
 # Edge Computing: Simulador Físico y Bridge Bidireccional Serial/MQTT (UTN FRSF / GITDA)
 
 Este directorio contiene los componentes que corren en el nodo de borde (*Edge Node* en Raspberry Pi) encargados de:
-1. La ingesta continua de telemetría física o simulada hacia InfluxDB 2.x con sellado de tiempo UTC oficial.
+1. La ingesta continua de telemetría física o simulada hacia InfluxDB 2.x con sellado de tiempo de recepción oficial.
 2. El canal bidireccional de control entre el Backend (vía Mosquitto MQTT) y el microcontrolador (vía Serial USB o stdin del simulador).
 3. La simulación de dinámica física e hidráulica de los tanques interconectados para experimentación en desarrollo.
 
 ---
 
-## 1. Dependencias Fijadas y Compatibilidad ARM 32-bit (Raspberry Pi 2)
+## 1. Versión de Python y Dependencias Fijadas (Raspberry Pi 2)
 
-Las dependencias en `edge/requirements.txt` están fijadas a versiones exactas verificadas:
+- **Versión mínima de Python**: **Python 3.9+** (compatible con Python 3.9, 3.10, 3.11, 3.12, 3.13 y 3.14). Se evita toda sintaxis exclusiva de versiones posteriores a 3.9 (como uniones PEP 604 `|` en firmas o tipos genéricos built-in no subscriptables en 3.9).
+- Las dependencias en `edge/requirements.txt` están fijadas a versiones exactas verificadas:
 
 ```text
 pyserial==3.5
@@ -18,9 +19,12 @@ influxdb-client==1.50.0
 paho-mqtt==2.1.0
 ```
 
+### Razón de PyYAML 6.0.2 (y no 6.0.3):
+- `PyYAML 6.0.2` (lanzada en agosto de 2024 para resolver compatibilidad con Cython 3) es la versión estable LTS de referencia, disponible de forma inmediata en repositorios oficiales de Debian / Raspberry Pi OS (`sudo apt install python3-yaml`) y precompilada en wheels `armhf` (ARMv7 32-bit).
+- `PyYAML 6.0.3` (publicada a fines de septiembre de 2025) únicamente introdujo wheels binarias precompiladas para los entornos experimentales free-threaded de Python 3.13 y 3.14 (`cp314t`). Para Python 3.9 a 3.12 y para plataformas ARMv7 de 32 bits, ambas versiones son funcionalmente idénticas.
+
 ### Compatibilidad con Raspberry Pi 2 (ARMv7 / 32 bits / `armhf` / sin Docker):
-- **100% Pure Python (`py3-none-any.whl`)**: `paho-mqtt`, `pyserial` e `influxdb-client` (junto con sus dependencias directas `reactivex`, `certifi`, `urllib3`, `python-dateutil`) son paquetes universales en Python puro. **No requieren extensiones nativas en C ni invocación a `gcc` / compiladores**.
-- **PyYAML**: En Raspberry Pi OS (Debian), se puede instalar mediante el gestor del sistema (`sudo apt install python3-yaml`) o a través de piwheels precompilado.
+- **100% Pure Python (`py3-none-any.whl`)**: `paho-mqtt`, `pyserial` e `influxdb-client` (junto con `reactivex`, `certifi`, `urllib3`, `python-dateutil`) son paquetes universales en Python puro. **No requieren extensiones nativas en C ni compiladores (`gcc`) en el dispositivo**.
 - Se garantiza la instalación inmediata y ligera en Raspberry Pi 2 Modelo B sin sobrecargar la memoria RAM ni requerir Docker.
 
 ---
@@ -41,7 +45,7 @@ El bridge actúa como puente concurrente desacoplado:
          +-------------------------+--------------+----+
          |                 edge/bridge.py              |
          |  - Validación de timestamp (ts > 5s -> exp) |
-         |  - Deduplicación por id en ventana de N     |
+         |  - Deduplicación idempotente por id         |
          |  - Timeout asíncrono de 2.5s -> dev_timeout |
          |  - Cola secuencial de comandos (Queue)      |
          +-----------+--------------------+------------+
@@ -57,17 +61,18 @@ El bridge actúa como puente concurrente desacoplado:
 
 ### 2.1 Reglas de Seguridad y Validación de Comandos
 1. **Timestamping y Expiración (`ts`)**:
-   Todo comando en `tanques/cmd` incluye la marca de tiempo `ts` (epoch en milisegundos). Si el comando tiene más de **5 segundos de antigüedad** al momento de ser procesado por el bridge (por ejemplo, por encolamiento previo en el broker o retrasos en la red), **no se envía al hardware** y se emite inmediatamente en `tanques/ack`:
+   Todo comando en `tanques/cmd` puede incluir la marca de tiempo `ts` (epoch en milisegundos). Si el comando tiene más de **5000 ms** de antigüedad al momento de ser procesado por el bridge (configurable mediante `COMMAND_MAX_AGE_MS`), **no se envía al hardware** y se emite inmediatamente en `tanques/ack`:
    ```json
    {"ack": "<id>", "ok": false, "reason": "expired"}
    ```
-2. **Deduplicación en Ventana Deslizante**:
-   El bridge mantiene una ventana deslizante de los últimos $N=100$ identificadores de comando (`id`). Si ingresa un comando repetido, se rechaza sin accionar el actuador:
-   ```json
-   {"ack": "<id>", "ok": false, "reason": "duplicate"}
-   ```
+   Si `COMMAND_MAX_AGE_MS=0`, la verificación de expiración se desactiva por completo.
+2. **Deduplicación Idempotente en Ventana Deslizante**:
+   El bridge mantiene una ventana deslizante de los últimos $N=100$ identificadores de comando (`id`) y almacena los acks resueltos.
+   - Si ingresa un comando repetido cuyo ack ya fue generado, el bridge **republica el ack original guardado** (con `ok: true` o el resultado que haya tenido).
+   - Si el comando aún se encuentra pendiente de respuesta en el puerto serial, el duplicado se **ignora en silencio**.
+   - **Bajo ninguna circunstancia se emite un ack de fallo con `reason: "duplicate"`**.
 3. **Correlación Asíncrona y Timeout de Dispositivo (2.5 s)**:
-   Al despachar un comando válido al microcontrolador, se inicia un temporizador de **2.5 segundos**. Si el hardware no responde dentro de esa ventana, el comando se desasocia y se publica:
+   Al despachar un comando al microcontrolador, se inicia un temporizador de **2.5 segundos**. Si el hardware no responde dentro de esa ventana, el comando se desasocia y se publica:
    ```json
    {"ack": "<id>", "ok": false, "reason": "device_timeout"}
    ```
@@ -78,7 +83,47 @@ El bridge actúa como puente concurrente desacoplado:
 
 ---
 
-## 3. Manejo Serial y Particularidad del Arduino Uno
+## 3. Reloj en Raspberry Pi 2 (sin RTC), Sincronización NTP e InfluxDB
+
+La Raspberry Pi 2 carece de chip de reloj en tiempo real con batería (RTC). Si la placa arranca sin conexión a internet, su reloj del sistema se inicializa en una fecha histórica (año 1970 o la fecha de compilación del kernel).
+
+### 3.1 Sellado de Tiempo en InfluxDB
+Para desacoplar la precisión temporal del estado del reloj en la Raspberry Pi:
+- El bridge formatea la telemetría en InfluxDB Line Protocol **sin timestamp explícito por defecto** (`telemetry,mode=auto ...`).
+- InfluxDB asigna automáticamente la hora oficial del servidor en el momento exacto de la recepción HTTP.
+- Para pruebas donde se requiera el reloj local, se dispone de la bandera `--use-local-timestamp`.
+
+### 3.2 Detección de Desfase y Configuración de Expiración
+- Al iniciar, el bridge verifica si el año del sistema es inferior a 2025. De ser así, emite una advertencia destacada en los logs solicitando verificar la sincronización horaria o desactivar el control de expiración (`COMMAND_MAX_AGE_MS=0`).
+- Si la Pi opera en una red aislada sin internet:
+  ```bash
+  export COMMAND_MAX_AGE_MS=0
+  ```
+
+### 3.3 Sincronización NTP Recomendada
+En Raspberry Pi OS, verificar y habilitar la sincronización de red con `systemd-timesyncd`:
+```bash
+# Comprobar estado de sincronización horaria
+timedatectl status
+
+# Habilitar sincronización NTP si está inactiva
+sudo timedatectl set-ntp true
+sudo systemctl restart systemd-timesyncd
+```
+En redes locales aisladas con servidor NTP propio en el router, editar `/etc/systemd/timesyncd.conf` y definir:
+```ini
+[Time]
+NTP=192.168.1.1
+```
+
+### 3.4 Evaluación de MQTT v5 Message Expiry Interval
+Se verificó experimentalmente contra la versión homologada **Mosquitto 2.0.22**:
+- Mosquitto soporta de forma nativa la propiedad `MessageExpiryInterval` de MQTT v5.
+- Cuando un mensaje se publica con `MessageExpiryInterval = 10` y no hay suscriptores conectados o el consumidor tarda en procesarlo, Mosquitto descuenta el tiempo transcurrido y descarta el paquete automáticamente al expirar, previniendo la acumulación de comandos obsoletos en la cola del broker.
+
+---
+
+## 4. Manejo Serial y Particularidad del Arduino Uno
 
 - **Desactivación de DTR y RTS**: Antes de abrir el descriptor de archivo del puerto serial (`ser.open()`), `pyserial` configura explícitamente `dtr = False` y `rts = False`.
 - **Comportamiento del Arduino Uno**:
@@ -89,7 +134,7 @@ El bridge actúa como puente concurrente desacoplado:
 
 ---
 
-## 4. Guía de Instalación en Raspberry Pi 2 (Sin Docker)
+## 5. Guía de Instalación en Raspberry Pi 2 (Sin Docker)
 
 En la Raspberry Pi 2 (nodo de borde conectado físicamente al Arduino / ESP32 mediante USB), el bridge se ejecuta nativamente bajo Python 3 con un entorno virtual y se administra como servicio `systemd`.
 
@@ -118,9 +163,10 @@ ls -l /dev/serial/by-id/
 # Ejemplo: /dev/serial/by-id/usb-Arduino__www.arduino.cc__0043_...
 ```
 
-### Paso 4: Configurar Variables de Entorno
-Crear el archivo `/home/pi/becabelgrano/edge/.env`:
-```env
+### Paso 4: Configurar Variables de Entorno y Permisos
+Crear el archivo `/home/pi/becabelgrano/edge/.env` con permisos restringidos (`chmod 600`):
+```bash
+cat << 'EOF' > /home/pi/becabelgrano/edge/.env
 INFLUX_URL=http://<IP_SERVIDOR_DOCKER>:8086
 INFLUX_TOKEN=tanques-super-secret-token-2025
 INFLUX_ORG=utn-frsf
@@ -129,9 +175,14 @@ MQTT_HOST=<IP_SERVIDOR_DOCKER>
 MQTT_PORT=1883
 MQTT_USER=tanques
 MQTT_PASSWORD=<TU_PASSWORD_REAL>
+COMMAND_MAX_AGE_MS=5000
+EOF
+
+chmod 600 /home/pi/becabelgrano/edge/.env
 ```
 
 ### Paso 5: Instalar y Activar el Servicio Systemd
+El archivo de servicio asigna el usuario sin privilegios `pi` e incorpora el grupo `dialout` para acceso a dispositivos seriales:
 ```bash
 sudo cp /home/pi/becabelgrano/edge/systemd/tanques-bridge.service /etc/systemd/system/
 sudo systemctl daemon-reload
@@ -146,15 +197,33 @@ sudo journalctl -u tanques-bridge -f
 
 ---
 
-## 5. Pruebas Locales del Bridge
+## 6. Pruebas Locales y Herramientas de Diagnóstico
 
-### 5.1 Con Simulador Interno (Desarrollo)
+### 6.1 Con Simulador Interno (Desarrollo)
+Cargar variables de entorno previas y ejecutar sin incluir contraseñas en la línea de comandos:
 ```bash
+# Exportar credenciales del entorno
+export MQTT_USER=tanques
+export MQTT_PASSWORD=<clave_real>
+
 # Iniciar bridge consumiendo datos del simulador interno
-python edge/bridge.py --source sim --sim-speed 2.0 --mqtt-host localhost --mqtt-user tanques --mqtt-password <tu_clave>
+python edge/bridge.py --source sim --sim-speed 2.0
 ```
 
-### 5.2 Con Microcontrolador Físico
+### 6.2 Herramienta de Envío de Comandos (`edge/tools/send_cmd.py`)
+Permite publicar comandos estructurados en `tanques/cmd` para verificar la respuesta del Bridge y del hardware:
+```bash
+# Encender bomba con timestamp fresco (0 s de edad)
+python edge/tools/send_cmd.py cmd-001 true
+
+# Apagar bomba con comando de 10 segundos de antigüedad (debe descartarse por 'expired')
+python edge/tools/send_cmd.py cmd-viejo false 10
+
+# Simular comando con broker y credenciales específicas si difieren de las variables de entorno
+python edge/tools/send_cmd.py cmd-002 true --host localhost --port 1883
+```
+
+### 6.3 Con Microcontrolador Físico
 ```bash
 # En Windows:
 python edge/bridge.py --source serial:COM5:115200
@@ -163,8 +232,11 @@ python edge/bridge.py --source serial:COM5:115200
 python edge/bridge.py --source serial:/dev/ttyACM0:115200
 ```
 
-### 5.3 Suite de Tests Automatizados
+### 6.4 Suite Completa de Tests Automatizados
+Ejecuta de forma conjunta todas las pruebas unitarias y de integración del módulo edge (20 tests en total):
 ```bash
-python -m pytest edge/tests/test_bridge.py -v
+python -m pytest edge/ -v
 ```
-Verifica unitariamente comandos válidos, acks, interlocks, timeouts, expiraciones, duplicados, descarte de ruido no JSON, persistencia de telemetría e integración de punta a punta con el simulador.
+Verifica:
+- 10 tests de física del simulador, interlocks, retries y formateo InfluxDB (`edge/test_edge.py`).
+- 10 tests del Bridge bidireccional, acks, interlocks, timeouts, expiraciones, deduplicación idempotente, arranque con broker caído y flujo E2E con el simulador (`edge/tests/test_bridge.py`).

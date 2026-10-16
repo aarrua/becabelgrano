@@ -13,9 +13,10 @@
    - Tasa de transmisión: **115200 bps**, 8 bits de datos, sin paridad, 1 bit de parada (8N1).
    - Control de reset de la placa ESP32: El host (Raspberry Pi) debe inicializar la conexión con las líneas DTR y RTS desactivadas (`dtr=False`, `rts=False` en pySerial) antes de abrir el descriptor de archivo para evitar el reinicio automático del ESP32.
 2. **Sincronización Temporal**:
-   - El microcontrolador ESP32 **no posee RTC** ni conexión directa a un servidor NTP.
-   - El ESP32 emite el contador de tiempo de ejecución `uptime_ms`.
-   - El sellado de tiempo canónico (*timestamp UTC*) lo estampa el script `edge/bridge.py` en la Raspberry Pi al momento de recibir y validar la trama antes de persistirla en InfluxDB.
+   - Ni el microcontrolador ESP32 ni la Raspberry Pi 2 **poseen RTC de hardware** con respaldo de batería.
+   - El ESP32 emite el contador de tiempo de ejecución `uptime_ms` (monótono incremental).
+   - **Sellado oficial en InfluxDB**: Para evitar problemas derivados de relojes desincronizados en el borde al arrancar sin acceso a internet o previo a la sincronización NTP, la telemetría se escribe en InfluxDB Line Protocol **sin timestamp explícito por defecto**. InfluxDB asigna automáticamente su hora oficial de recepción del servidor con precisión de nanosegundos.
+   - Para entornos con NTP verificado, el script `edge/bridge.py` ofrece la opción `--use-local-timestamp` para usar la marca de tiempo generada localmente en la Pi.
 3. **Topología Hidráulica y Mecánica**:
    - Dos tanques acoplados en serie: Tanque A (superior) y Tanque B (inferior/intermedio), que descargan hacia un reservorio.
    - Las secciones transversales (área en $\text{cm}^2$) de los cilindros son distintas y **no están fijas en el código**: residen en archivos de configuración (`edge/config.yaml` / `application.yml`).
@@ -97,7 +98,8 @@ Los comandos se envían a demanda cuando un usuario autorizado (`DOCENTE`) solic
   "id": "c104",
   "cmd": "set",
   "target": "pump",
-  "value": true
+  "value": true,
+  "ts": 1740000000000
 }
 ```
 
@@ -109,6 +111,7 @@ Los comandos se envían a demanda cuando un usuario autorizado (`DOCENTE`) solic
 | `cmd` | String | Sí | `"set"` | Acción a ejecutar sobre el actuador. |
 | `target` | String | Sí | `"pump"` *(extensible)* | Nombre del actuador destino. El software debe estar desacoplado para incorporar otros actuadores en el futuro. |
 | `value` | Boolean / Variant | Sí | `true` \| `false` | Valor objetivo del actuador (para bomba: encender/apagar). |
+| `ts` | Integer | No | Epoch ms ($\ge 0$) | Marca de tiempo en milisegundos de generación del comando. Si difiere de la hora del bridge en más de `COMMAND_MAX_AGE_MS`, se descarta por seguridad. |
 
 ---
 
@@ -145,3 +148,5 @@ Si un interlock de seguridad está activo (por ejemplo, el Tanque A o Tanque B s
 - `"unknown_target"`: El actuador especificado en `target` no existe o no está registrado.
 - `"invalid_command"`: Estructura de trama JSON no válida o comando no soportado.
 - `"invalid_value"`: El valor suministrado no coincide con el tipo esperado por el actuador.
+- `"expired"`: Comando descartado por el Bridge al superar la antigüedad máxima admisible (`COMMAND_MAX_AGE_MS`).
+- `"device_timeout"`: El dispositivo físico (ESP32/Arduino) no respondió con su ACK dentro del tiempo límite (2.5 s).

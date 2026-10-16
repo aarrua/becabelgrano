@@ -26,20 +26,30 @@ y este proyecto adhiere a [Conventional Commits](https://www.conventionalcommits
 - **Canal Bidireccional de Comandos en `edge/bridge.py`**:
   - Incorporada integración con broker Mosquitto mediante librería `paho-mqtt==2.1.0` (pure Python sin extensiones C, compatible con Raspberry Pi 2 ARM 32-bit).
   - Suscripción a `tanques/cmd` y publicación en `tanques/ack` con **QoS 1**, `clean_session=True` y sin flag retain.
-  - Validación de expiración de comandos en el borde: descarta comandos con antigüedad mayor a 5 segundos (según campo `ts` epoch ms) y emite `{"ack": id, "ok": false, "reason": "expired"}` sin enviarlos al hardware.
-  - Deduplicación de comandos por `id` mediante ventana deslizante de 100 elementos, emitiendo `{"ack": id, "ok": false, "reason": "duplicate"}` para prevenir accionamientos duplicados de la bomba.
+  - Validación de expiración de comandos en el borde: descarta comandos con antigüedad mayor a `COMMAND_MAX_AGE_MS` (default 5000 ms; 0 desactiva) según campo `ts` epoch ms y emite `{"ack": id, "ok": false, "reason": "expired"}` sin enviarlos al hardware.
+  - Deduplicación idempotente de comandos por `id` en ventana deslizante de 100 elementos: republica el ack original si ya fue resuelto o ignora en silencio si aún se encuentra pendiente de respuesta física, sin emitir jamás acks de fallo con motivo `duplicate`.
   - Correlación asíncrona de acks por `id` con temporizador de 2.5 segundos: si el equipo físico no responde en ese lapso, emite `{"ack": id, "ok": false, "reason": "device_timeout"}`.
   - Arquitectura concurrente robusta: un único hilo lector dueño del descriptor serial/stdout, cola secuencial de salida (`queue.Queue`) y mapa de comandos pendientes protegido por `threading.Lock()`.
   - Discriminación por contenido entre tramas periódicas de telemetría (hacia InfluxDB 2.x) y tramas de respuesta ack (hacia Mosquitto MQTT).
   - Descarte seguro de líneas no JSON o ruido generado durante el auto-reset del Arduino Uno al conectarse el USB.
-  - Reconexión tolerante con backoff exponencial tanto ante caídas del broker MQTT como ante desconexiones del puerto serial físico o terminaciones del subproceso simulador.
-- **Dependencias Fijadas en `edge/requirements.txt`**:
-  - Pinned exacto sin rangos: `pyserial==3.5`, `pyyaml==6.0.2`, `influxdb-client==1.50.0` y `paho-mqtt==2.1.0`.
-- **Infraestructura de Despliegue en Borde (Raspberry Pi 2)**:
-  - Creada unidad de servicio systemd en `edge/systemd/tanques-bridge.service` con reinicio automático continuo (`Restart=always`).
-  - Documentada la guía paso a paso de instalación y ejecución en Raspberry Pi 2 (Python 3 venv, sin Docker) y la particularidad del capacitor DTR del Uno en `edge/README.md`.
-- **Suite de Pruebas Automatizadas (`edge/tests/test_bridge.py`)**:
-  - 9 tests unitarios e integrados pasando al 100%: comando válido, ack con interlock, device_timeout, expiración, deduplicación, filtrado de ruido no JSON, separación telemetría/ack, reconexión MQTT y test end-to-end con el subproceso real del simulador.
+  - Reconexión tolerante con backoff exponencial ante caídas del broker MQTT, desconexiones del puerto serial físico o terminaciones del subproceso simulador.
+- **Manejo de Tiempo e InfluxDB en Borde (Raspberry Pi 2 sin RTC)**:
+  - Telemetría emitida en Line Protocol sin timestamp explícito por defecto (`use_server_timestamp=True`), permitiendo que InfluxDB aplique el sellado canónico oficial de recepción a nivel nanosegundo y protegiendo el histórico ante relojes desfasados al arrancar.
+  - Opción `--use-local-timestamp` para sellado local en entornos con sincronización NTP verificada.
+  - Chequeo de inicio con log de advertencia si el reloj del sistema reporta año menor a 2025 (desfase típico pre-NTP).
+  - Verificada la compatibilidad nativa de Mosquitto 2.0.22 con la propiedad `MessageExpiryInterval` de MQTT v5.
+- **Compatibilidad de Código y Dependencias**:
+  - Declarada compatibilidad estricta con **Python 3.9+** (evitando sintaxis posterior como uniones PEP 604 en `edge/simulator.py` y `edge/bridge.py`).
+  - Fijadas versiones exactas en `edge/requirements.txt`: `pyserial==3.5`, `pyyaml==6.0.2`, `influxdb-client==1.50.0` y `paho-mqtt==2.1.0`.
+  - Documentada la adopción de `PyYAML==6.0.2` como versión LTS estándar en Debian/Raspberry Pi OS (6.0.3 solo añade wheels binarias para Python 3.13/3.14 free-threaded).
+- **Seguridad y Servicio Systemd (`edge/systemd/tanques-bridge.service`)**:
+  - Lectura de credenciales (`MQTT_PASSWORD`, `INFLUX_TOKEN`) desde variables de entorno o archivo `edge/.env` con permisos restringidos `chmod 600`.
+  - Configurado usuario sin privilegios `User=pi`, `Group=pi` y grupo suplementario `SupplementaryGroups=dialout` para acceso a dispositivos seriales.
+  - Ejemplos de uso en CLI sin contraseñas explícitas en parámetros de comando.
+- **Herramienta de Diagnóstico (`edge/tools/send_cmd.py`)**:
+  - Script para publicar comandos de prueba con `id`, valor booleano (`true`/`false`), edad artificial del timestamp (`age_s`) y target configurable.
+- **Suite de Pruebas Automatizadas (20 tests en total)**:
+  - Ejecución conjunta de `edge/test_edge.py` (10 tests de física, simulación e interlocks) y `edge/tests/test_bridge.py` (10 tests del bridge bidireccional, incluyendo test de arranque con broker caído `test_mqtt_broker_down_at_startup`).
 
 ### Planned (Fase 4 - Próximas Etapas)
 - **Etapa 3**: `BridgeActuatorGateway` real en Backend Spring Boot (publicación MQTT, timeout de 3 s, migración H2 y modelo de auditoría con campo `target`).
