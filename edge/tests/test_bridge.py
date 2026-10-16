@@ -15,7 +15,7 @@ Verifica:
 import json
 import queue
 import time
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Tuple
 from unittest.mock import MagicMock
 
 import pytest
@@ -28,7 +28,7 @@ class FakeMqttClient:
 
     def __init__(self) -> None:
         self.published_messages: List[Dict[str, Any]] = []
-        self.subscriptions: List[tuple[str, int]] = []
+        self.subscriptions: List[Tuple[str, int]] = []
         self.on_connect = None
         self.on_disconnect = None
         self.on_message = None
@@ -69,7 +69,7 @@ def bridge(fake_mqtt: FakeMqttClient) -> TanquesBridge:
         influx_writer=None,
         mqtt_client=fake_mqtt,
         cmd_timeout_s=0.2,  # 200 ms para pruebas veloces y deterministas
-        max_cmd_age_s=5.0,
+        command_max_age_ms=5000,
         dedup_window_size=50
     )
     yield b
@@ -175,28 +175,52 @@ def test_expired_command(bridge: TanquesBridge, fake_mqtt: FakeMqttClient) -> No
 
 
 def test_duplicate_command(bridge: TanquesBridge, fake_mqtt: FakeMqttClient) -> None:
-    """5. Un comando con un 'id' ya procesado en la ventana se rechaza como duplicado."""
+    """5. Comandos duplicados: republica el ack original si ya se resolvió, o ignora en silencio si está pendiente."""
     cmd_id = "test-cmd-dup"
     now_ms = int(time.time() * 1000)
     cmd = {"id": cmd_id, "cmd": "set", "target": "pump", "value": True, "ts": now_ms}
 
-    # Primer envío
+    # Escenario A: El comando ingresa y es despachado
     bridge.handle_incoming_command(json.dumps(cmd))
     assert not bridge.command_queue.empty()
     _ = bridge.command_queue.get_nowait()
 
-    # Segundo envío idéntico
+    # El dispositivo responde con ACK exitoso
+    device_response = json.dumps({"ack": cmd_id, "ok": True})
+    bridge.process_device_line(device_response)
+
+    assert len(fake_mqtt.published_messages) == 1
+    assert fake_mqtt.published_messages[0]["payload"]["ack"] == cmd_id
+    assert fake_mqtt.published_messages[0]["payload"]["ok"] is True
+
+    # Reintento idéntico del mismo comando (duplicado tras resolución)
     bridge.handle_incoming_command(json.dumps(cmd))
 
-    # La cola no debe tener nada nuevo
+    # La cola hacia el dispositivo no debe recibir nada nuevo
     assert bridge.command_queue.empty()
 
-    # Se debió publicar ack con motivo 'duplicate'
-    assert len(fake_mqtt.published_messages) == 1
-    msg = fake_mqtt.published_messages[0]
-    assert msg["payload"]["ack"] == cmd_id
-    assert msg["payload"]["ok"] is False
-    assert msg["payload"]["reason"] == "duplicate"
+    # Se debió REPUBLICAR el ack original guardado (ok=True), NUNCA un ack de fallo ("duplicate")
+    assert len(fake_mqtt.published_messages) == 2
+    republished = fake_mqtt.published_messages[1]
+    assert republished["payload"]["ack"] == cmd_id
+    assert republished["payload"]["ok"] is True
+    assert "reason" not in republished["payload"]
+
+    # Escenario B: Duplicado recibido mientras el comando aún está pendiente en serial
+    cmd_pending_id = "test-cmd-pending"
+    cmd_pending = {"id": cmd_pending_id, "cmd": "set", "target": "pump", "value": False, "ts": now_ms}
+
+    bridge.handle_incoming_command(json.dumps(cmd_pending))
+    assert not bridge.command_queue.empty()
+    _ = bridge.command_queue.get_nowait()
+
+    # Se envía duplicado ANTES de que el hardware responda
+    messages_count_before = len(fake_mqtt.published_messages)
+    bridge.handle_incoming_command(json.dumps(cmd_pending))
+
+    # No se encola nada extra y se ignora en silencio sin publicar fallo
+    assert bridge.command_queue.empty()
+    assert len(fake_mqtt.published_messages) == messages_count_before
 
 
 def test_non_json_lines_ignored(bridge: TanquesBridge, fake_mqtt: FakeMqttClient) -> None:
@@ -319,3 +343,19 @@ def test_end_to_end_with_simulator(fake_mqtt: FakeMqttClient) -> None:
 
     finally:
         b.stop()
+
+
+def test_mqtt_broker_down_at_startup() -> None:
+    """10. Si el broker MQTT está caído al arrancar, connect_async no crashea y el bridge opera."""
+    b = TanquesBridge(
+        mqtt_host="127.0.0.1",
+        mqtt_port=18839,  # Puerto donde no hay broker escuchando
+        cmd_timeout_s=1.0
+    )
+    # start_mqtt no debe lanzar excepciones no controladas
+    b.start_mqtt()
+    assert b.running is True
+    # Telemetría y líneas recibidas se procesan con normalidad sin crashear
+    b.process_device_line("Línea de prueba sin crasheo")
+    b.stop()
+

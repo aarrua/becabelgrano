@@ -21,7 +21,7 @@ import threading
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, Optional, Union
 
 BASE_DIR = Path(__file__).resolve().parent
 DEFAULT_CONFIG_PATH = BASE_DIR / "config.yaml"
@@ -122,7 +122,7 @@ DEFAULT_CONFIG: Dict[str, Any] = {
 def _parse_simple_yaml(text: str) -> Dict[str, Any]:
     """Parseador básico de YAML por indentación para no depender estrictamente de PyYAML."""
     res: Dict[str, Any] = {}
-    current_section: str | None = None
+    current_section: Optional[str] = None
     for raw_line in text.splitlines():
         line = raw_line.split("#")[0].rstrip()
         if not line:
@@ -149,7 +149,7 @@ def _parse_simple_yaml(text: str) -> Dict[str, Any]:
     return res
 
 
-def load_config(config_path: Path | None) -> Dict[str, Any]:
+def load_config(config_path: Optional[Union[Path, str]]) -> Dict[str, Any]:
     """Carga configuración desde YAML si existe o usa default."""
     if config_path and config_path.is_file():
         try:
