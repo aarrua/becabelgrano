@@ -12,22 +12,22 @@ Wants=network-online.target
 Type=simple
 User=pi
 Group=pi
+SupplementaryGroups=dialout
 WorkingDirectory=/home/pi/becabelgrano/edge
 
-# Variables de entorno opcionales desde archivo .env
-EnvironmentFile=-/home/pi/becabelgrano/.env
+# Variables de entorno cargadas desde archivo .env protegido (chmod 600)
+# Debe contener: MQTT_PASSWORD=<clave>, INFLUX_TOKEN=<token>, etc.
 EnvironmentFile=-/home/pi/becabelgrano/edge/.env
 
-# Variables por defecto del entorno
+# Variables por defecto del entorno (sin secretos hardcodeados)
 Environment="PYTHONUNBUFFERED=1"
 Environment="INFLUX_URL=http://localhost:8086"
-Environment="INFLUX_TOKEN=tanques-super-secret-token-2025"
 Environment="INFLUX_ORG=utn-frsf"
 Environment="INFLUX_BUCKET=tanques"
 Environment="MQTT_HOST=localhost"
 Environment="MQTT_PORT=1883"
 Environment="MQTT_USER=tanques"
-# MQTT_PASSWORD debe definirse en el archivo .env
+Environment="COMMAND_MAX_AGE_MS=5000"
 
 # Ejecución desde entorno virtual de Python 3
 # En producción física, usar el enlace persistente por ID: /dev/serial/by-id/usb-Arduino...
