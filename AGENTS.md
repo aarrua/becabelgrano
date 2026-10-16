@@ -158,9 +158,9 @@ Al completar cada fase:
 1. **Probar el backend en perfil prod contra InfluxDB**:
    `InfluxTelemetryProvider` nunca se probó con datos reales generados por el bridge. Se debe verificar y confirmar que los valores mostrados en la SPA coincidan exactamente con los paneles de Grafana.
 2. **Servir el build del front (`dist/`) desde Nginx en `/`**:
-   Actualmente `infra/nginx/nginx.conf` sirve un `index.html` estático de placeholder. Se debe configurar el volumen o despliegue para servir `frontend/dist/` en el contenedor Nginx para producción.
-3. **Canal real de comandos backend $\to$ bridge $\to$ ESP32**:
-   Hoy `BridgeActuatorGateway` en prod devuelve HTTP `503 Service Unavailable` (`bridge_unavailable`). Debe construirse el canal de comandos (ej. listener HTTP REST local en `bridge.py` o socket IPC) para que el bridge despache la trama serial al microcontrolador y retorne el `ack` correspondiente, y debe poder probarse tanto con el simulador como con el hardware.
+   **Completado en Fase 4 (Etapa 1)**. `infra/docker-compose.yml` monta `frontend/dist/` en `/usr/share/nginx/html` y `infra/nginx/nginx.conf` resuelve rutas con `try_files $uri $uri/ /index.html;`.
+3. **Canal real de comandos backend $\to$ bridge $\to$ ESP32 / Arduino Uno**:
+   En Fase 4 (Etapa 1) se incorporó Mosquitto MQTT `2.0.22` con autenticación obligatoria y tópicos `tanques/cmd` y `tanques/ack` con QoS 1. En las Etapas 2 y 3 se conectan el bridge y el backend respectivamente.
 4. **Firmware definitivo del ESP32**:
    Implementación en C/C++ (Arduino/ESP-IDF) con emisión periódica de telemetría respetando el contrato JSON v1, recepción e interpretación de comandos seriales y los interlocks de seguridad definitivos de última barrera en el microcontrolador.
 5. **Calibrar el umbral del interlock (85 %) con el hardware físico real**:

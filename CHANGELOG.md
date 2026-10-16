@@ -9,16 +9,24 @@ y este proyecto adhiere a [Conventional Commits](https://www.conventionalcommits
 
 ## [Unreleased]
 
-### Planned (Fase 4 - Puesta en Marcha Integral, Integración en Producción y Firmware)
-- Prueba y validación del backend en perfil `prod` contra InfluxDB 2.x (`InfluxTelemetryProvider`) y verificación de consistencia con los dashboards de Grafana.
-- Despliegue de los artefactos estáticos compilados de la SPA (`frontend/dist/`) en el contenedor Nginx en la raíz `/`.
-- Implementación del canal bidireccional de comandos en `edge/bridge.py` (listener local) para despacho serial hacia el ESP32 / simulador y resolución de `BridgeActuatorGateway` (503).
-- Firmware definitivo para ESP32 con contrato JSON v1, parser de comandos e interlocks de hardware de última barrera.
-- Calibración del umbral de interlock del 85% con el kit físico y evaluación de corte por volumen total combinado (A+B).
-- Ajuste del formato de decimales en los gauges del dashboard de Grafana (`Decimals = 1`).
-- Etiqueta dinámica de conexión en la SPA según timestamp de última trama recibida (> 5 s sin datos).
-- Incorporación homogénea del campo `target` en todos los modelos de auditoría.
-- Validación visual de diseño en dispositivos móviles reales.
+### Added - Fase 4: Puesta en Marcha Integral (Etapa 1 - Mosquitto + Nginx Frontend)
+- **Broker MQTT Mosquitto (`infra/docker-compose.yml`)**:
+  - Incorporado servicio `tanques-mosquitto` con imagen fijada `eclipse-mosquitto:2.0.22` en el puerto `1883`.
+  - Configuración estricta en `infra/mosquitto/mosquitto.conf` con `allow_anonymous false` y almacenamiento de contraseñas hasheadas en `infra/mosquitto/passwords`.
+  - Scripts generadores de contraseñas multiplataforma (`infra/mosquitto/init-passwords.sh` y `infra/mosquitto/init-passwords.ps1`) utilizando el propio contenedor Docker para evitar dependencias locales del binario `mosquitto_passwd`.
+  - Reglas en `.gitignore` para garantizar que el archivo `passwords` nunca sea commiteado al repositorio.
+  - Tópicos definidos para el canal bidireccional de control con QoS 1: `tanques/cmd` (comandos del backend) y `tanques/ack` (confirmaciones/rechazos del bridge).
+- **Despliegue del Frontend Web en Nginx**:
+  - Configurado montaje en volumen de solo lectura de `../frontend/dist` hacia `/usr/share/nginx/html` en el contenedor `tanques-nginx`.
+  - Soporte de enrutamiento declarativo cliente para React Router mediante directiva `try_files $uri $uri/ /index.html;`, permitiendo navegación y recarga directa en subrutas (`/monitor`, `/audit`, `/login`).
+  - Documentación de compilación y puesta en marcha en `infra/README.md`, actualización de `README.md` y unificación de variables en `.env.example` y `infra/.env.example`.
+
+### Planned (Fase 4 - Próximas Etapas)
+- **Etapa 2**: Integración MQTT en `edge/bridge.py` (suscripción a `tanques/cmd`, despacho serial, publicación en `tanques/ack` con QoS 1, timeout de 2.5 s, reconexión con backoff, servicio systemd y guía para Raspberry Pi 2).
+- **Etapa 3**: `BridgeActuatorGateway` real en Backend Spring Boot (publicación MQTT, timeout de 3 s, migración H2 y modelo de auditoría con campo `target`).
+- **Etapa 4**: Prueba integral en producción (Docker + Bridge/Simulador + Backend prod + Frontend vía Nginx).
+- **Etapa 5**: Pendientes menores (decimales en gauges de Grafana, etiqueta dinámica de conexión ESP32, nota de calibración de interlock).
+- **Etapa 6**: Firmware definitivo para Arduino Uno (`firmware/tanques/tanques.ino` sin ArduinoJson, diagram.json de Wokwi, verificación de memoria RAM < 75%).
 
 ---
 
