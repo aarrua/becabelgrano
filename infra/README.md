@@ -17,30 +17,30 @@ Este directorio contiene la configuración y orquestación de los servicios base
 
 ## 2. Broker Mosquitto MQTT
 
-### 2.1 Configuración de Seguridad
-Mosquitto opera con **autenticación obligatoria por usuario y contraseña** (`allow_anonymous false`). Las contraseñas están almacenadas de forma hasheada (PBKDF2-SHA512) en el archivo `infra/mosquitto/passwords`.
+### 2.1 Configuración de Seguridad y Red
+- Mosquitto opera con **autenticación obligatoria por usuario y contraseña** (`allow_anonymous false`).
+- Escucha en `0.0.0.0:1883`. Las contraseñas se almacenan hasheadas (PBKDF2-SHA512) en `infra/mosquitto/passwords`.
+- **Aislamiento en Jornadas**: En demostraciones, jornadas o pruebas presenciales, el sistema debe desplegarse siempre sobre una **red propia aislada** (router Wi-Fi o hotspot portátil dedicado), **nunca sobre la red institucional**.
 
-> **Seguridad**: El archivo `passwords` **nunca se commitea al repositorio** (ignorado por `.gitignore`). Debe ser generado en el entorno de despliegue mediante el script provisto.
+> **Seguridad**: El archivo `passwords` **nunca se commitea al repositorio** (ignorado por `.gitignore`). Debe ser generado en el entorno de despliegue mediante los scripts provistos.
 
 ### 2.2 Generación del Archivo de Contraseñas
-Para generar o actualizar el archivo `infra/mosquitto/passwords`, se proveen scripts multiplataforma que utilizan la propia imagen Docker de Mosquitto para evitar dependencias locales:
+Los scripts multiplataforma utilizan la propia imagen Docker de Mosquitto para evitar dependencias locales. **Validan estrictamente** que la contraseña no esté vacía ni contenga el valor de ejemplo por defecto (`cambiar-esta-clave`):
 
 - **En Linux / macOS / Git Bash**:
   ```bash
   cd infra/mosquitto
   chmod +x init-passwords.sh
-  ./init-passwords.sh
+  ./init-passwords.sh tanques mi_password_segura
   ```
-  *(Opcionalmente se pueden pasar credenciales específicas: `./init-passwords.sh <usuario> <contraseña>`)*
 
 - **En Windows (PowerShell)**:
   ```powershell
   cd infra\mosquitto
-  .\init-passwords.ps1
+  .\init-passwords.ps1 -Username tanques -Password mi_password_segura
   ```
-  *(Opcionalmente: `.\init-passwords.ps1 -Username tanques -Password mi_password`)*
 
-El script lee por defecto las credenciales desde `infra/.env` (`MQTT_USER` y `MQTT_PASSWORD`), aplicando `tanques` / `tanques123` como fallback de desarrollo.
+Si no se pasan parámetros, el script lee `MQTT_USER` y `MQTT_PASSWORD` desde `infra/.env`. Si el valor es `cambiar-esta-clave` o está vacío, la ejecución se interrumpe con error para impedir arranques con credenciales inseguras.
 
 ### 2.3 Tópicos y QoS
 El broker Mosquitto administra los tópicos del canal bidireccional de control entre el backend y el edge:
@@ -49,21 +49,39 @@ El broker Mosquitto administra los tópicos del canal bidireccional de control e
 
 ---
 
-## 3. Nginx: Punto de Entrada Único y Servidor del Frontend
+## 3. Nginx: Punto de Entrada Único y Proxies
 
-El contenedor **Nginx** unifica el acceso en el puerto 80:
-- **`/`**: Sirve los archivos estáticos de la aplicación React SPA compilada (`frontend/dist/`), montada como volumen de solo lectura. Incorpora `try_files $uri $uri/ /index.html;` para permitir el enrutamiento declarativo del lado del cliente (React Router) ante recargas o accesos directos a subrutas (`/monitor`, `/audit`, `/login`).
-- **`/api/`**: Redirige peticiones REST al Backend Spring Boot (`http://host.docker.internal:8080/api/`).
-- **`/grafana/`**: Redirige al servidor de dashboards Grafana con soporte de WebSockets (`Upgrade` y `Connection "upgrade"`).
+El contenedor **Nginx** unifica el acceso en el puerto 80 (`http://localhost`):
+
+1. **`/` (Frontend SPA)**:
+   Sirve los estáticos compilados de React (`frontend/dist/`), montados en `/usr/share/nginx/html` en modo lectura (`:ro`). Incluye `try_files $uri $uri/ /index.html;` para permitir recargas y acceso directo a subrutas declarativas (`/monitor`, `/audit`, `/login`).
+
+2. **`/api/` (Backend REST Spring Boot)**:
+   - Configurado en `infra/nginx/nginx.conf`:
+     ```nginx
+     location /api/ {
+         proxy_pass http://host.docker.internal:8080/api/;
+         ...
+     }
+     ```
+   - **Alcance desde Docker al notebook**: En `infra/docker-compose.yml`, el servicio `nginx` define `extra_hosts: ["host.docker.internal:host-gateway"]`.
+     - En Docker Desktop (Windows/macOS), `host.docker.internal` resuelve directamente a la máquina anfitriona.
+     - En Docker Engine (Linux), `host-gateway` mapea la IP de la interfaz bridge (típicamente `172.17.0.1`), permitiendo que Nginx en el contenedor alcance el backend Spring Boot corriendo en el host en el puerto `8080`.
+     - Spring Boot (Tomcat embebido) escucha por defecto en `0.0.0.0:8080`, aceptando las peticiones reenviadas por Nginx.
+
+3. **`/grafana/` (Paneles Embebidos de Monitoreo)**:
+   - Proxy reverso hacia `http://grafana:3000/grafana/` dentro de la red interna de Docker (`tanques-net`).
+   - Mantiene headers de WebSockets (`Upgrade` y `Connection "upgrade"`).
 
 ---
 
 ## 4. Guía de Despliegue y Puesta en Marcha
 
 ### Paso 1: Configurar Variables de Entorno
-Copiar el archivo de ejemplo si no existe:
+Copiar el archivo de ejemplo y configurar contraseñas seguras:
 ```bash
 cp infra/.env.example infra/.env
+# Editar infra/.env con tu editor favorito y definir MQTT_PASSWORD
 ```
 
 ### Paso 2: Compilar el Frontend React
@@ -78,10 +96,10 @@ cd ..
 ### Paso 3: Inicializar Contraseñas de Mosquitto
 ```bash
 # Linux / macOS
-infra/mosquitto/init-passwords.sh
+infra/mosquitto/init-passwords.sh tanques tu_password_segura
 
-# Windows
-powershell -ExecutionPolicy Bypass -File infra/mosquitto/init-passwords.ps1
+# Windows (PowerShell)
+powershell -ExecutionPolicy Bypass -File infra/mosquitto/init-passwords.ps1 -Username tanques -Password tu_password_segura
 ```
 
 ### Paso 4: Iniciar Contenedores Docker
@@ -90,9 +108,25 @@ cd infra
 docker compose up -d
 ```
 
-### Paso 5: Verificación
-- **Frontend SPA**: `http://localhost/`
-- **Ruta directa React Router**: `http://localhost/monitor`
-- **Broker MQTT**: `localhost:1883` (probar publicación autenticada con usuario `tanques`)
-- **Grafana**: `http://localhost/grafana`
-- **InfluxDB**: `http://localhost:8086`
+### Paso 5: Verificación sin nombres de red hardcodeados
+- **Verificar servicios corriendo**:
+  ```bash
+  docker compose ps
+  ```
+- **Probar rechazo de acceso anónimo en Mosquitto**:
+  ```bash
+  docker compose exec mosquitto mosquitto_pub -t "tanques/test" -m "test"
+  ```
+  *(Debe responder: `Connection Refused: not authorised`)*
+
+- **Probar publicación autenticada con QoS 1 en `tanques/cmd`**:
+  ```bash
+  docker compose exec mosquitto mosquitto_pub -u tanques -P tu_password_segura -t "tanques/cmd" -q 1 -m "{\"cmd\":\"pump_on\",\"target\":\"pump\"}"
+  ```
+  *(Debe salir con código 0 sin errores)*
+
+- **Verificar Frontend servido por Nginx**:
+  Abrir [http://localhost/](http://localhost/) o [http://localhost/monitor](http://localhost/monitor).
+
+- **Verificar Grafana**:
+  Abrir [http://localhost/grafana](http://localhost/grafana).

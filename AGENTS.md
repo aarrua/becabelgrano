@@ -50,6 +50,9 @@ La arquitectura general está definida y no debe alterarse:
 9. **Umbral de Interlock de Sobrellenado**:
    - Configurado por defecto a **`85.0%`** (`overflow_threshold_pct: 85.0`) tanto en `edge/config.yaml` como en `application.yml`.
    - Permite compensar la inercia del volumen que continúa descargando el Tanque A hacia el Tanque B una vez apagada la bomba, garantizando que el Tanque B no supere el 99% de capacidad.
+10. **Broker MQTT (Mosquitto) y Aislamiento de Red en Demostraciones**:
+   - Mosquitto escucha en `0.0.0.0:1883` con autenticación obligatoria por usuario y contraseña (`allow_anonymous false`, contraseñas PBKDF2-SHA512).
+   - En jornadas presenciales, demostraciones o eventos institucionales, el sistema debe operar indefectiblemente sobre una **red propia** (router Wi-Fi dedicado o hotspot/punto de acceso portátil propio), **nunca sobre la red institucional** (para prevenir aislamiento de clientes AP, filtrado o bloqueo de puertos MQTT/HTTP, o escaneos no autorizados en la red universitaria).
 
 ---
 

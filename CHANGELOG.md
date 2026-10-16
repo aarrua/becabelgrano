@@ -13,13 +13,14 @@ y este proyecto adhiere a [Conventional Commits](https://www.conventionalcommits
 - **Broker MQTT Mosquitto (`infra/docker-compose.yml`)**:
   - Incorporado servicio `tanques-mosquitto` con imagen fijada `eclipse-mosquitto:2.0.22` en el puerto `1883`.
   - Configuración estricta en `infra/mosquitto/mosquitto.conf` con `allow_anonymous false` y almacenamiento de contraseñas hasheadas en `infra/mosquitto/passwords`.
-  - Scripts generadores de contraseñas multiplataforma (`infra/mosquitto/init-passwords.sh` y `infra/mosquitto/init-passwords.ps1`) utilizando el propio contenedor Docker para evitar dependencias locales del binario `mosquitto_passwd`.
+  - Scripts generadores de contraseñas multiplataforma (`infra/mosquitto/init-passwords.sh` y `infra/mosquitto/init-passwords.ps1`) utilizando el propio contenedor Docker para evitar dependencias locales del binario `mosquitto_passwd`, con validación estricta que aborta la ejecución si la contraseña está vacía o contiene el valor de ejemplo por defecto (`cambiar-esta-clave`).
   - Reglas en `.gitignore` para garantizar que el archivo `passwords` nunca sea commiteado al repositorio.
   - Tópicos definidos para el canal bidireccional de control con QoS 1: `tanques/cmd` (comandos del backend) y `tanques/ack` (confirmaciones/rechazos del bridge).
+  - Regla de aislamiento de red documentada en `AGENTS.md` (uso obligatorio de red propia / hotspot en demostraciones en lugar de la red institucional).
 - **Despliegue del Frontend Web en Nginx**:
   - Configurado montaje en volumen de solo lectura de `../frontend/dist` hacia `/usr/share/nginx/html` en el contenedor `tanques-nginx`.
   - Soporte de enrutamiento declarativo cliente para React Router mediante directiva `try_files $uri $uri/ /index.html;`, permitiendo navegación y recarga directa en subrutas (`/monitor`, `/audit`, `/login`).
-  - Documentación de compilación y puesta en marcha en `infra/README.md`, actualización de `README.md` y unificación de variables en `.env.example` y `infra/.env.example`.
+  - Documentación de compilación, proxies y puesta en marcha en `infra/README.md`, actualización de `README.md` y unificación de variables en `.env.example` y `infra/.env.example`.
 
 ### Planned (Fase 4 - Próximas Etapas)
 - **Etapa 2**: Integración MQTT en `edge/bridge.py` (suscripción a `tanques/cmd`, despacho serial, publicación en `tanques/ack` con QoS 1, timeout de 2.5 s, reconexión con backoff, servicio systemd y guía para Raspberry Pi 2).
