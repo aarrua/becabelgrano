@@ -81,6 +81,8 @@ pnpm-debug.log*
 /infra/data/
 /infra/influxdb/data/
 /infra/grafana/data/
+/infra/mosquitto/passwords
+infra/mosquitto/passwords
 
 # Logs
 logs/
