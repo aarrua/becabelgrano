@@ -77,10 +77,10 @@ export function MonitorView() {
             />
             <span className="status-label">
               {isDisconnected
-                ? 'ESP32 Desconectado'
+                ? 'Equipo Desconectado'
                 : isStale
                 ? 'Sin datos recientes'
-                : 'ESP32 Conectado'}
+                : 'Equipo Conectado'}
             </span>
           </div>
 

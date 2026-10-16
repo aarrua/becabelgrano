@@ -4,7 +4,7 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 @JsonIgnoreProperties(ignoreUnknown = true)
-@Schema(description = "Respuesta de confirmación (ACK) recibida desde el Bridge/ESP32 por MQTT (tópico tanques/ack)")
+@Schema(description = "Respuesta de confirmación (ACK) recibida desde el Bridge/Equipo por MQTT (tópico tanques/ack)")
 public record BridgeAckMessage(
         @Schema(description = "Identificador de correlación asociado al comando original", example = "c_1a2b3c4d")
         String ack,
