@@ -42,7 +42,12 @@ if (-not $Password) {
         }
     }
 }
-if (-not $Password) { $Password = "tanques123" }
+
+# Validar que la contrasena no este vacia ni sea el placeholder inseguro
+if ([string]::IsNullOrWhiteSpace($Password) -or $Password -eq "cambiar-esta-clave") {
+    Write-Error "ERROR: Debe definir una contrasena valida para Mosquitto (MQTT_PASSWORD). No se permite utilizar la contrasena vacia ni el valor de ejemplo 'cambiar-esta-clave'. Configure una contrasena segura en infra/.env (MQTT_PASSWORD=...) o pasela por parametro: .\init-passwords.ps1 -Username tanques -Password mi_password_segura"
+    exit 1
+}
 
 Write-Host "Generando archivo de credenciales Mosquitto para el usuario: '$Username'..." -ForegroundColor Cyan
 

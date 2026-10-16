@@ -7,7 +7,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PASSWORDS_FILE="${SCRIPT_DIR}/passwords"
 
-# 1. Determinar credenciales (argumentos > variables de entorno > .env > defaults)
+# 1. Determinar credenciales (argumentos > variables de entorno > .env)
 USER="${1:-${MQTT_USER:-}}"
 PASSWORD="${2:-${MQTT_PASSWORD:-}}"
 
@@ -24,7 +24,15 @@ if [ -z "$USER" ] || [ -z "$PASSWORD" ]; then
 fi
 
 USER="${USER:-tanques}"
-PASSWORD="${PASSWORD:-tanques123}"
+
+# Validar que la contraseña no esté vacía ni sea el placeholder inseguro
+if [ -z "$PASSWORD" ] || [ "$PASSWORD" = "cambiar-esta-clave" ]; then
+    echo "ERROR: Debe definir una contraseña válida para Mosquitto (MQTT_PASSWORD)." >&2
+    echo "No se permite utilizar la contraseña vacía ni el valor de ejemplo 'cambiar-esta-clave'." >&2
+    echo "Configure una contraseña segura en infra/.env (MQTT_PASSWORD=...) o pásela por parámetro:" >&2
+    echo "  $0 [usuario] <contraseña-segura>" >&2
+    exit 1
+fi
 
 echo "Generando archivo de credenciales Mosquitto para el usuario: '$USER'..."
 
