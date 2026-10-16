@@ -22,8 +22,26 @@ y este proyecto adhiere a [Conventional Commits](https://www.conventionalcommits
   - Soporte de enrutamiento declarativo cliente para React Router mediante directiva `try_files $uri $uri/ /index.html;`, permitiendo navegación y recarga directa en subrutas (`/monitor`, `/audit`, `/login`).
   - Documentación de compilación, proxies y puesta en marcha en `infra/README.md`, actualización de `README.md` y unificación de variables en `.env.example` y `infra/.env.example`.
 
+### Added - Fase 4: Puesta en Marcha Integral (Etapa 2 - Bridge con MQTT y Resiliencia Serial)
+- **Canal Bidireccional de Comandos en `edge/bridge.py`**:
+  - Incorporada integración con broker Mosquitto mediante librería `paho-mqtt==2.1.0` (pure Python sin extensiones C, compatible con Raspberry Pi 2 ARM 32-bit).
+  - Suscripción a `tanques/cmd` y publicación en `tanques/ack` con **QoS 1**, `clean_session=True` y sin flag retain.
+  - Validación de expiración de comandos en el borde: descarta comandos con antigüedad mayor a 5 segundos (según campo `ts` epoch ms) y emite `{"ack": id, "ok": false, "reason": "expired"}` sin enviarlos al hardware.
+  - Deduplicación de comandos por `id` mediante ventana deslizante de 100 elementos, emitiendo `{"ack": id, "ok": false, "reason": "duplicate"}` para prevenir accionamientos duplicados de la bomba.
+  - Correlación asíncrona de acks por `id` con temporizador de 2.5 segundos: si el equipo físico no responde en ese lapso, emite `{"ack": id, "ok": false, "reason": "device_timeout"}`.
+  - Arquitectura concurrente robusta: un único hilo lector dueño del descriptor serial/stdout, cola secuencial de salida (`queue.Queue`) y mapa de comandos pendientes protegido por `threading.Lock()`.
+  - Discriminación por contenido entre tramas periódicas de telemetría (hacia InfluxDB 2.x) y tramas de respuesta ack (hacia Mosquitto MQTT).
+  - Descarte seguro de líneas no JSON o ruido generado durante el auto-reset del Arduino Uno al conectarse el USB.
+  - Reconexión tolerante con backoff exponencial tanto ante caídas del broker MQTT como ante desconexiones del puerto serial físico o terminaciones del subproceso simulador.
+- **Dependencias Fijadas en `edge/requirements.txt`**:
+  - Pinned exacto sin rangos: `pyserial==3.5`, `pyyaml==6.0.2`, `influxdb-client==1.50.0` y `paho-mqtt==2.1.0`.
+- **Infraestructura de Despliegue en Borde (Raspberry Pi 2)**:
+  - Creada unidad de servicio systemd en `edge/systemd/tanques-bridge.service` con reinicio automático continuo (`Restart=always`).
+  - Documentada la guía paso a paso de instalación y ejecución en Raspberry Pi 2 (Python 3 venv, sin Docker) y la particularidad del capacitor DTR del Uno en `edge/README.md`.
+- **Suite de Pruebas Automatizadas (`edge/tests/test_bridge.py`)**:
+  - 9 tests unitarios e integrados pasando al 100%: comando válido, ack con interlock, device_timeout, expiración, deduplicación, filtrado de ruido no JSON, separación telemetría/ack, reconexión MQTT y test end-to-end con el subproceso real del simulador.
+
 ### Planned (Fase 4 - Próximas Etapas)
-- **Etapa 2**: Integración MQTT en `edge/bridge.py` (suscripción a `tanques/cmd`, despacho serial, publicación en `tanques/ack` con QoS 1, timeout de 2.5 s, reconexión con backoff, servicio systemd y guía para Raspberry Pi 2).
 - **Etapa 3**: `BridgeActuatorGateway` real en Backend Spring Boot (publicación MQTT, timeout de 3 s, migración H2 y modelo de auditoría con campo `target`).
 - **Etapa 4**: Prueba integral en producción (Docker + Bridge/Simulador + Backend prod + Frontend vía Nginx).
 - **Etapa 5**: Pendientes menores (decimales en gauges de Grafana, etiqueta dinámica de conexión ESP32, nota de calibración de interlock).
