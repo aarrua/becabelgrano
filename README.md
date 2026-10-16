@@ -81,7 +81,7 @@ graph TD
 | **Fase 1** | Simulador físico de tanques, bridge serial, InfluxDB, Grafana y nginx | **Completada** |
 | **Fase 2** | Backend Spring Boot (JWT, roles DOCENTE/ALUMNO, ActuatorGateway, auditoría H2) | **Completada** |
 | **Fase 3** | Frontend React SPA (Monitoreo, paneles Grafana embebidos, control seguro por roles) | **Completada** |
-| **Fase 4** | Puesta en marcha integral, integración en producción, bridge bidireccional y firmware | **En curso (Etapa 1)** |
+| **Fase 4** | Puesta en marcha integral, integración en producción, bridge bidireccional y firmware | **En curso (Etapas 1, 2 y 3 completadas)** |
 
 Consultá el detalle de cambios históricos en el [CHANGELOG.md](file:///c:/Users/Ale/OneDrive%20-%20UTN%20-%20Santa%20Fe/UTN%202025/Beca%20Belgrano/becabelgrano/CHANGELOG.md).
 
@@ -122,10 +122,21 @@ python edge/bridge.py --source sim --pump-on
 ```
 
 ### 4.3 Backend REST (Spring Boot 3.5.x)
-Requiere Java 21 y Maven. En perfil `dev` el backend corre **completamente autónomo** con base de datos H2 en `./data/` y mocks físicos sincronizados:
+Requiere Java 21 y Maven.
+- **Perfil `dev`** (autónomo sin Docker ni Mosquitto, con base H2 en `./data/` y mocks sincronizados):
 ```bash
 cd backend
 mvn spring-boot:run -Dspring-boot.run.profiles=dev
+```
+- **Perfil `prod`** (conectado a Mosquitto MQTT real para comandos e InfluxDB para telemetría):
+```bash
+cd backend
+# Exportar credenciales requeridas y ejecutar
+export MQTT_PASSWORD="<clave-generada-con-init-passwords>"
+export JWT_SECRET="clave-super-secreta-de-al-menos-32-caracteres-longitud"
+export DOCENTE_PASSWORD="<clave-docente>"
+export ALUMNO_PASSWORD="<clave-alumno>"
+mvn spring-boot:run -Dspring-boot.run.profiles=prod
 ```
 * **API REST**: `http://localhost:8080/api`
 * **Swagger UI / OpenAPI 3**: `http://localhost:8080/swagger-ui.html`

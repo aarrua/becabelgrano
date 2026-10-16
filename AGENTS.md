@@ -33,6 +33,8 @@ La arquitectura general está definida y no debe alterarse:
    - **OpenAPI 3 / Swagger UI**: `springdoc-openapi-starter-webmvc-ui: 2.8.16`.
    - **JWT**: `io.jsonwebtoken:jjwt-* 0.12.6`.
    - **InfluxDB Client**: `com.influxdb:influxdb-client-java 7.2.0`.
+   - **Cliente MQTT**: `org.eclipse.paho:org.eclipse.paho.client.mqttv3:1.2.5` fijada exacta.
+     > *Decisión arquitectónica consciente*: La línea Paho Java v3 (`1.2.5`) está madura y altamente estable en producción, aunque no tiene nuevos releases desde julio de 2020 (existe `org.eclipse.paho:org.eclipse.paho.mqttv5.client`, a reevaluar a futuro). Spring Integration MQTT se descartó conscientemente por simplicidad (evita sobrecarga de abstracciones de mensajería para dos tópicos fijos), no porque Paho no sea necesaria.
    - Seguridad con JWT stateless. Roles: `DOCENTE` (permisos de control de actuadores y auditoría) y `ALUMNO` (solo lectura).
    - Persistencia de usuarios y eventos de auditoría en base de datos H2 en disco (`./data/tanquesdb` con `AUTO_SERVER=TRUE`).
    - Documentación viva de endpoints mediante OpenAPI 3 expuesta en `/swagger-ui.html` y `/v3/api-docs`.
@@ -43,10 +45,17 @@ La arquitectura general está definida y no debe alterarse:
    El área transversal de cada tanque (cilindros de distintos diámetros) y los factores de conversión deben residir en archivos de configuración (`edge/config.yaml` / `application.yml`), nunca hardcodeados.
 7. **Diseño Extensible de Actuadores**:
    Actualmente el único actuador físico es la bomba (`pump`). El sistema modela el estado de actuadores como un mapa extensible (`Map<String, Boolean>`) y desacopla la validación de targets para que agregar nuevos actuadores futuros no requiera modificar la arquitectura.
-8. **Reglas Estrictas de Configuración en Producción (`prod`)**:
+8. **Reglas Estrictas de Configuración y Control en Producción (`prod`)**:
    - El secreto JWT (`JWT_SECRET`) es obligatorio, sin valor por defecto y con longitud mínima de 32 caracteres (256 bits).
    - Las contraseñas iniciales de `DOCENTE` y `ALUMNO` en producción deben definirse obligatoriamente en `${DOCENTE_PASSWORD}` y `${ALUMNO_PASSWORD}` sin fallbacks por defecto; la aplicación aborta su arranque si faltan.
-   - `BridgeActuatorGateway` en prod retorna HTTP `503 Service Unavailable` (`reason: "bridge_unavailable"`) y audita el rechazo mientras no exista el canal de comandos real hacia el bridge. No mantiene estado ficticio en memoria (su estado se deriva de la última telemetría).
+   - `BridgeActuatorGateway` opera en perfil `prod` mediante Paho MQTT:
+     - Publica en `tanques/cmd` con QoS 1, sin retain, `id` único y `ts` en epoch ms.
+     - Espera confirmación en `tanques/ack` con timeout de 3 segundos por comando.
+     - **Threading no bloqueante**: La espera con timeout (`future.get(3, SECONDS)`) se realiza indefectiblemente en el hilo del request HTTP, nunca dentro del callback `messageArrived` de Paho (evita bloquear el hilo despachador del cliente).
+     - **Reconexión y resuscripción**: Se implementa `MqttCallbackExtended` resuscribiéndose a `tanques/ack` (QoS 1) en `connectComplete`. Sesión limpia (`cleanSession=true`), sin retain, y `clientId` único con sufijo aleatorio (`tanques-backend-prod-<random>`).
+     - **Ciclo de vida sin fugas**: El mapa de comandos en vuelo (`pendingAcks`) se limpia en bloque `finally` tanto al resolver exitosamente como al agotarse el timeout o fallar la espera.
+     - **Arranque tolerante a fallas**: El backend no bloquea su inicio si Mosquitto está temporalmente caído (reintentos en hilo daemon background); mientras no hay conexión, responde HTTP 503 (`reason: "bridge_unavailable"`).
+     - **Manejo de estado desconocido**: Un timeout (3 s), `device_timeout` o `expired` retorna 503 informando estado desconocido. `getActuatorsState()` deriva el estado de la última telemetría en InfluxDB; si transcurrieron más de 5 segundos sin tramas, el actuador se reporta como `null` (desconocido), previniendo asumir falsamente que el actuador está apagado.
 9. **Umbral de Interlock de Sobrellenado**:
    - Configurado por defecto a **`85.0%`** (`overflow_threshold_pct: 85.0`) tanto en `edge/config.yaml` como en `application.yml`.
    - Permite compensar la inercia del volumen que continúa descargando el Tanque A hacia el Tanque B una vez apagada la bomba, garantizando que el Tanque B no supere el 99% de capacidad.
@@ -163,7 +172,11 @@ Al completar cada fase:
 2. **Servir el build del front (`dist/`) desde Nginx en `/`**:
    **Completado en Fase 4 (Etapa 1)**. `infra/docker-compose.yml` monta `frontend/dist/` en `/usr/share/nginx/html` y `infra/nginx/nginx.conf` resuelve rutas con `try_files $uri $uri/ /index.html;`.
 3. **Canal real de comandos backend $\to$ bridge $\to$ ESP32 / Arduino Uno**:
-   En Fase 4 (Etapa 1) se incorporó Mosquitto MQTT `2.0.22` con autenticación obligatoria y tópicos `tanques/cmd` y `tanques/ack` con QoS 1. En las Etapas 2 y 3 se conectan el bridge y el backend respectivamente.
+   - **Completado en Fase 4 (Etapas 1, 2 y 3)**:
+     - Mosquitto MQTT 2.0.22 autenticado con tópicos `tanques/cmd` y `tanques/ack` (Etapa 1).
+     - Bridge Python bidireccional con hilo lector serial, cola de comandos, deduplicación y timeout (Etapa 2).
+     - `BridgeActuatorGateway` en Spring Boot con Eclipse Paho 1.2.5, correlación de ACKs asíncrona no bloqueante, reconexión automática y tests completos (Etapa 3).
+     - Resta Etapa 4 (verificación integral E2E en producción con Docker) y Etapa 5 (firmware).
 4. **Firmware definitivo del ESP32**:
    Implementación en C/C++ (Arduino/ESP-IDF) con emisión periódica de telemetría respetando el contrato JSON v1, recepción e interpretación de comandos seriales y los interlocks de seguridad definitivos de última barrera en el microcontrolador.
 5. **Calibrar el umbral del interlock (85 %) con el hardware físico real**:
@@ -171,9 +184,9 @@ Al completar cada fase:
 6. **Formato de Gauges en Grafana**:
    Los gauges del dashboard provisionado muestran actualmente valores como `0.100%`. Se debe configurar `Decimals = 1` en el JSON del dashboard (`infra/grafana/provisioning/dashboards/tanques-dashboard.json`).
 7. **Etiqueta dinámica de conexión ESP32 en la SPA**:
-   La etiqueta "ESP32 Conectado" de la barra superior debe depender dinámicamente de la antigüedad de la última trama de telemetría recibida (marcar "Sin datos" o "Desconectado" si transcurrieron más de 5 segundos sin actualización), en lugar de mostrar un estado estático.
+   **Completado en Fase 4 (Etapa 3)**. La SPA calcula dinámicamente el estado a partir de la antigüedad de la telemetría (`dataUpdatedAt`), mostrando "ESP32 Conectado" (verde), "Sin datos recientes" (ámbar, $>5$ s) o "ESP32 Desconectado" (rojo, $>10$ s o error).
 8. **Registro de auditoría no incluye `target`**:
-   Verificar y garantizar la incorporación y consistencia del campo `target` en todos los flujos y modelos de auditoría entre backend y bridge.
+   **Completado en Fase 4 (Etapa 3)**. Incorporado en base de datos H2 (`columnDefinition = "varchar(64) default 'pump'"`), DTOs de auditoría y renderizado en columna de la SPA con tipo seguro.
 9. **Verificación del diseño en vista de celular**:
    El diseño responsivo para móviles quedó implementado con media queries y testeado funcionalmente, pero no se probó visualmente en un dispositivo físico real.
 
