@@ -77,15 +77,8 @@ El contenedor **Nginx** unifica el acceso en el puerto 80 (`http://localhost`):
 
 ## 4. Guía de Despliegue y Puesta en Marcha
 
-### Paso 1: Configurar Variables de Entorno
-Copiar el archivo de ejemplo y configurar contraseñas seguras:
-```bash
-cp infra/.env.example infra/.env
-# Editar infra/.env con tu editor favorito y definir MQTT_PASSWORD
-```
-
-### Paso 2: Compilar el Frontend React
-Generar los estáticos de producción en `frontend/dist/`:
+### Paso 1: Compilar el Frontend React
+Dado que el directorio `frontend/dist/` no está versionado en el repositorio (ignorado en `.gitignore`), es **estrictamente obligatorio** compilar la SPA antes de iniciar Nginx para que el volumen montado contenga los archivos estáticos de producción:
 ```bash
 cd frontend
 npm install
@@ -93,14 +86,23 @@ npm run build
 cd ..
 ```
 
-### Paso 3: Inicializar Contraseñas de Mosquitto
+### Paso 2: Configurar Variables de Entorno
+Copiar el archivo de plantilla a `infra/.env` y definir credenciales reales seguras:
+```bash
+cp infra/.env.example infra/.env
+# Editar infra/.env con tu editor favorito y definir una clave segura en MQTT_PASSWORD
+```
+
+### Paso 3: Inicializar Contraseñas de Mosquitto con init-passwords
+El script generará el archivo `infra/mosquitto/passwords` (ignorado por Git). Si la contraseña está vacía o es `cambiar-esta-clave`, el script abortará la ejecución:
 ```bash
 # Linux / macOS
-infra/mosquitto/init-passwords.sh tanques tu_password_segura
+infra/mosquitto/init-passwords.sh tanques <tu_password_real>
 
 # Windows (PowerShell)
-powershell -ExecutionPolicy Bypass -File infra/mosquitto/init-passwords.ps1 -Username tanques -Password tu_password_segura
+powershell -ExecutionPolicy Bypass -File infra/mosquitto/init-passwords.ps1 -Username tanques -Password <tu_password_real>
 ```
+*(Si ya configuraste `MQTT_PASSWORD` en `infra/.env`, podés ejecutar el script sin argumentos y tomará automáticamente dicho valor).*
 
 ### Paso 4: Iniciar Contenedores Docker
 ```bash
@@ -108,7 +110,10 @@ cd infra
 docker compose up -d
 ```
 
-### Paso 5: Verificación sin nombres de red hardcodeados
+### Paso 5: Verificación Manual
+
+> **AVISO DE SEGURIDAD**: En los comandos que requieran `-P`, utilizá siempre la **contraseña real configurada en tu `infra/.env`**, nunca valores de ejemplo (`cambiar-esta-clave`) ni credenciales públicas.
+
 - **Verificar servicios corriendo**:
   ```bash
   docker compose ps
@@ -121,7 +126,7 @@ docker compose up -d
 
 - **Probar publicación autenticada con QoS 1 en `tanques/cmd`**:
   ```bash
-  docker compose exec mosquitto mosquitto_pub -u tanques -P tu_password_segura -t "tanques/cmd" -q 1 -m "{\"cmd\":\"pump_on\",\"target\":\"pump\"}"
+  docker compose exec mosquitto mosquitto_pub -u tanques -P <tu_password_real> -t "tanques/cmd" -q 1 -m "{\"cmd\":\"pump_on\",\"target\":\"pump\"}"
   ```
   *(Debe salir con código 0 sin errores)*
 
