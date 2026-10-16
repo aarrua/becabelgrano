@@ -19,9 +19,9 @@ influxdb-client==1.50.0
 paho-mqtt==2.1.0
 ```
 
-### Razón de PyYAML 6.0.2 (y no 6.0.3):
-- `PyYAML 6.0.2` (lanzada en agosto de 2024 para resolver compatibilidad con Cython 3) es la versión estable LTS de referencia, disponible de forma inmediata en repositorios oficiales de Debian / Raspberry Pi OS (`sudo apt install python3-yaml`) y precompilada en wheels `armhf` (ARMv7 32-bit).
-- `PyYAML 6.0.3` (publicada a fines de septiembre de 2025) únicamente introdujo wheels binarias precompiladas para los entornos experimentales free-threaded de Python 3.13 y 3.14 (`cp314t`). Para Python 3.9 a 3.12 y para plataformas ARMv7 de 32 bits, ambas versiones son funcionalmente idénticas.
+### Recomendación para PyYAML en Raspberry Pi:
+- En Raspberry Pi OS (Debian), se recomienda instalar `python3-yaml` mediante el gestor del sistema (`sudo apt install -y python3-yaml`) para disponer del paquete precompilado por la distribución y evitar compilar extensiones en la placa.
+- En `edge/requirements.txt` se mantiene fijada la versión probada `pyyaml==6.0.2` para entornos virtuales o desarrollo local.
 
 ### Compatibilidad con Raspberry Pi 2 (ARMv7 / 32 bits / `armhf` / sin Docker):
 - **100% Pure Python (`py3-none-any.whl`)**: `paho-mqtt`, `pyserial` e `influxdb-client` (junto con `reactivex`, `certifi`, `urllib3`, `python-dateutil`) son paquetes universales en Python puro. **No requieren extensiones nativas en C ni compiladores (`gcc`) en el dispositivo**.
@@ -138,15 +138,19 @@ Se verificó experimentalmente contra la versión homologada **Mosquitto 2.0.22*
 
 En la Raspberry Pi 2 (nodo de borde conectado físicamente al Arduino / ESP32 mediante USB), el bridge se ejecuta nativamente bajo Python 3 con un entorno virtual y se administra como servicio `systemd`.
 
+> **Aviso sobre el usuario y rutas en Raspberry Pi OS**:
+> En instalaciones modernas de Raspberry Pi OS, el instalador no crea obligatoriamente el usuario `pi` sino que solicita definir uno personalizado (por ejemplo, `alumno`, `tanques`, etc.).
+> Si el usuario configurado en la placa es distinto de `pi`, reemplazá las rutas `/home/pi/...` por `/home/<tu_usuario>/...` tanto al clonar el repositorio como en los campos `User`, `Group` y `WorkingDirectory`/`ExecStart`/`EnvironmentFile` de la unidad systemd (`/etc/systemd/system/tanques-bridge.service`).
+
 ### Paso 1: Instalar Paquetes del Sistema
 ```bash
 sudo apt update
-sudo apt install -y python3 python3-pip python3-venv git
+sudo apt install -y python3 python3-pip python3-venv python3-yaml git
 ```
 
 ### Paso 2: Clonar el Repositorio y Crear Entorno Virtual
 ```bash
-cd /home/pi
+cd /home/pi  # o /home/<tu_usuario>
 git clone <URL_REPOSITORIO> becabelgrano
 cd becabelgrano/edge
 

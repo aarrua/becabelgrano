@@ -10,6 +10,7 @@ Wants=network-online.target
 
 [Service]
 Type=simple
+# IMPORTANTE: Ajustar User, Group y las rutas (/home/<usuario>/...) si el usuario del sistema no es "pi"
 User=pi
 Group=pi
 SupplementaryGroups=dialout
@@ -17,6 +18,7 @@ WorkingDirectory=/home/pi/becabelgrano/edge
 
 # Variables de entorno cargadas desde archivo .env protegido (chmod 600)
 # Debe contener: MQTT_PASSWORD=<clave>, INFLUX_TOKEN=<token>, etc.
+# Ajustar ruta al usuario real: /home/<usuario>/becabelgrano/edge/.env
 EnvironmentFile=-/home/pi/becabelgrano/edge/.env
 
 # Variables por defecto del entorno (sin secretos hardcodeados)
