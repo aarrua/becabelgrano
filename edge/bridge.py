@@ -1,33 +1,56 @@
 #!/usr/bin/env python3
 """
-Bridge de Telemetría Serial/Simulador -> InfluxDB 2.x (UTN FRSF / GITDA)
-========================================================================
-Lee tramas JSON desde el puerto serial del ESP32 o desde el simulador de tanques,
-asigna el timestamp UTC oficial de ingesta (Edge Computing), formatea en InfluxDB
-Line Protocol y persiste en InfluxDB 2.x.
+Bridge de Telemetría y Control Bidireccional: Serial/Simulador <-> MQTT / InfluxDB 2.x
+====================================================================================
+Universidad Tecnológica Nacional - Facultad Regional Santa Fe (UTN FRSF / GITDA)
 
-Características de robustez:
-- Desactiva DTR y RTS antes de abrir puerto serial para no reiniciar el ESP32.
-- Reconexión automática con backoff exponencial ante caídas del puerto serie.
-- Filtrado de líneas corruptas o no JSON.
-- Admite escritura directa vía HTTP v2 /api/v2/write con soporte para InfluxDB 2.x.
+Funciones del Bridge:
+1. Ingesta de Telemetría:
+   Lee tramas JSON desde el puerto serial del microcontrolador (o simulador de tanques),
+   asigna el timestamp UTC oficial de ingesta (Edge Computing), formatea a Line Protocol
+   y persiste en InfluxDB 2.x.
+2. Canal Bidireccional de Comandos (MQTT <-> Serial):
+   - Se suscribe al tópico 'tanques/cmd' (QoS 1) en broker Mosquitto.
+   - Seguridad y validación: rechaza comandos expirados (> 5 s de antigüedad según campo 'ts')
+     y deduplica por 'id' en una ventana deslizante de N elementos.
+   - Despacha los comandos válidos hacia el puerto serial (o stdin del simulador) mediante
+     una cola secuencial, manteniendo un único hilo lector dueño del puerto.
+   - Correlación asíncrona por 'id': si el equipo físico responde en < 2.5 s, publica el
+     resultado en 'tanques/ack' (QoS 1). Si vence el timeout, emite 'device_timeout'.
+3. Resiliencia en el Borde:
+   - Desactiva DTR y RTS antes de abrir el puerto serial para evitar el reset del ESP32/Arduino.
+   - Reconexión automática con backoff exponencial ante caídas del puerto serie y del broker MQTT.
+   - Ignora líneas no JSON o ruido de arranque sin crashear.
 """
 
 from __future__ import annotations
 
 import argparse
+import collections
 import json
 import logging
 import os
+import queue
 import subprocess
 import sys
+import threading
 import time
 import urllib.error
 import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Iterator, Optional
+from typing import Any, Callable, Deque, Dict, Iterator, Optional, Set
+
+try:
+    import paho.mqtt.client as mqtt  # type: ignore
+except ImportError:
+    mqtt = None  # Se validará en tiempo de ejecución
+
+try:
+    import serial  # type: ignore
+except ImportError:
+    serial = None
 
 # Rutas resueltas relativas a la ubicación del script
 BASE_DIR = Path(__file__).resolve().parent
@@ -88,7 +111,7 @@ class InfluxWriter:
 
 def format_influx_line(data: Dict[str, Any], timestamp_ns: int) -> Optional[str]:
     """
-    Convierte una trama JSON del contrato al Line Protocol de InfluxDB.
+    Convierte una trama JSON de telemetría al Line Protocol de InfluxDB.
     
     Measurement: telemetry
     Tags: mode=<auto|manual>
@@ -134,287 +157,489 @@ def format_influx_line(data: Dict[str, Any], timestamp_ns: int) -> Optional[str]
 
 
 # ==============================================================================
-# Proveedores de Fuente de Datos (Serial, Simulador, Stdin)
+# Controlador Principal del Bridge (TanquesBridge)
 # ==============================================================================
 
-def stream_stdin() -> Iterator[str]:
-    """Generador que lee líneas desde standard input."""
-    logger.info("Leyendo tramas JSON desde stdin...")
-    for line in sys.stdin:
-        yield line
-
-
-def stream_simulator(
-    sim_script: Optional[Path | str] = None,
-    config_path: Optional[Path | str] = None,
-    extra_args: Optional[list[str]] = None,
-    initial_backoff: float = 1.0,
-    max_backoff: float = 30.0,
-    pump_on: bool = False,
-) -> Iterator[str]:
+class TanquesBridge:
     """
-    Ejecuta el simulador en un subproceso y streamea su salida estándar.
-    Si el subproceso del simulador termina o falla, loguea su código de salida y su stderr,
-    y reintenta con backoff exponencial en lugar de quedar colgado en silencio.
+    Controlador central del Bridge bidireccional.
+    Gestiona la conexión MQTT, la cola secuencial de salida y la correlación de acks.
     """
-    script_path = Path(sim_script) if sim_script else DEFAULT_SIM_PATH
-    cfg_path = Path(config_path) if config_path else DEFAULT_CONFIG_PATH
 
-    cmd = [sys.executable, str(script_path)]
-    if cfg_path and (not extra_args or "--config" not in extra_args):
-        cmd.extend(["--config", str(cfg_path)])
-    if pump_on and (not extra_args or "--pump-on" not in extra_args):
-        cmd.append("--pump-on")
-    if extra_args:
-        cmd.extend(extra_args)
+    def __init__(
+        self,
+        influx_writer: Optional[InfluxWriter] = None,
+        mqtt_host: str = "localhost",
+        mqtt_port: int = 1883,
+        mqtt_user: Optional[str] = None,
+        mqtt_password: Optional[str] = None,
+        cmd_topic: str = "tanques/cmd",
+        ack_topic: str = "tanques/ack",
+        cmd_timeout_s: float = 2.5,
+        max_cmd_age_s: float = 5.0,
+        dedup_window_size: int = 100,
+        log_interval: int = 30,
+        mqtt_client: Optional[Any] = None,
+    ) -> None:
+        self.influx_writer = influx_writer
+        self.mqtt_host = mqtt_host
+        self.mqtt_port = mqtt_port
+        self.mqtt_user = mqtt_user
+        self.mqtt_password = mqtt_password
+        self.cmd_topic = cmd_topic
+        self.ack_topic = ack_topic
+        self.cmd_timeout_s = cmd_timeout_s
+        self.max_cmd_age_s = max_cmd_age_s
+        self.log_interval = log_interval
 
-    backoff = initial_backoff
+        # Deduplicación de comandos en ventana deslizante
+        self.dedup_window_size = dedup_window_size
+        self._dedup_deque: Deque[str] = collections.deque(maxlen=dedup_window_size)
+        self._dedup_set: Set[str] = set()
 
-    while True:
-        logger.info("Lanzando simulador en subproceso: %s", " ".join(cmd))
-        proc: Optional[subprocess.Popen[str]] = None
+        # Comandos pendientes de ack: {cmd_id: {"timer": Timer, "created_at": float}}
+        self._pending_commands: Dict[str, Dict[str, Any]] = {}
+        self._lock = threading.Lock()
+
+        # Cola de comandos hacia el hardware/simulador
+        self.command_queue: queue.Queue[str] = queue.Queue()
+
+        # Métricas y estado
+        self.telemetry_success_count = 0
+        self.running = True
+
+        # Inicialización de cliente MQTT
+        self.mqtt_client = mqtt_client
+        if self.mqtt_client is None and mqtt is not None:
+            self._init_mqtt_client()
+
+    def _init_mqtt_client(self) -> None:
+        """Configura el cliente paho-mqtt con CallbackAPIVersion.VERSION2 y clean_session=True."""
+        client_id = f"tanques-bridge-{os.getpid()}"
+        self.mqtt_client = mqtt.Client(
+            callback_api_version=mqtt.CallbackAPIVersion.VERSION2,
+            client_id=client_id,
+            clean_session=True
+        )
+
+        if self.mqtt_user and self.mqtt_password:
+            self.mqtt_client.username_pw_set(self.mqtt_user, self.mqtt_password)
+
+        self.mqtt_client.on_connect = self._on_mqtt_connect
+        self.mqtt_client.on_disconnect = self._on_mqtt_disconnect
+        self.mqtt_client.on_message = self._on_mqtt_message
+
+    def start_mqtt(self) -> None:
+        """Inicia el cliente MQTT de forma tolerante a caídas iniciales con bucle asíncrono."""
+        if not self.mqtt_client:
+            logger.warning("Cliente MQTT no inicializado o paho-mqtt no disponible.")
+            return
+
+        logger.info("Iniciando conexión MQTT asíncrona a %s:%d...", self.mqtt_host, self.mqtt_port)
         try:
-            proc = subprocess.Popen(
-                cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-                bufsize=1
-            )
-
-            assert proc.stdout is not None
-            for line in proc.stdout:
-                backoff = initial_backoff  # Reset de backoff ante recepción de tramas
-                yield line
-
-            # Al agotarse stdout (EOF), esperar a que el subproceso termine y leer stderr
-            try:
-                ret_code = proc.wait(timeout=2)
-            except subprocess.TimeoutExpired:
-                logger.warning("El simulador no finalizó a tiempo tras cerrar stdout; forzando kill...")
-                proc.kill()
-                ret_code = proc.wait(timeout=1)
-
-            stderr_output = ""
-            if proc.stderr is not None:
-                try:
-                    stderr_output = proc.stderr.read()
-                except Exception as err:
-                    logger.debug("Error leyendo stderr del simulador: %s", err)
-
-            if ret_code != 0:
-                logger.error(
-                    "El subproceso del simulador finalizó con código de error %d. Stderr: %s",
-                    ret_code,
-                    stderr_output.strip() or "(vacío)"
-                )
-            else:
-                logger.warning(
-                    "El subproceso del simulador terminó (código 0). Stderr: %s",
-                    stderr_output.strip() or "(vacío)"
-                )
-
+            self.mqtt_client.connect_async(self.mqtt_host, self.mqtt_port, keepalive=60)
+            self.mqtt_client.loop_start()
         except Exception as e:
-            logger.error("Error al ejecutar o comunicar con el subproceso del simulador: %s", e)
-            if proc and proc.stderr:
-                try:
-                    err = proc.stderr.read()
-                    if err:
-                        logger.error("Stderr del simulador: %s", err.strip())
-                except Exception:
-                    pass
-        finally:
-            if proc:
-                if proc.stdout:
-                    try:
-                        proc.stdout.close()
-                    except Exception:
-                        pass
-                if proc.stderr:
-                    try:
-                        proc.stderr.close()
-                    except Exception:
-                        pass
-                if proc.poll() is None:
-                    try:
-                        proc.terminate()
-                        proc.wait(timeout=2)
-                    except Exception:
-                        pass
+            logger.error("Error al iniciar cliente MQTT: %s. Reintentos automáticos habilitados.", e)
 
-        logger.info("Reintentando lanzar simulador en %.1f segundos...", backoff)
-        time.sleep(backoff)
-        backoff = min(backoff * 2.0, max_backoff)
+    def stop(self) -> None:
+        """Detiene el bridge y libera recursos."""
+        self.running = False
+        with self._lock:
+            for item in self._pending_commands.values():
+                timer: threading.Timer = item.get("timer")
+                if timer:
+                    timer.cancel()
+            self._pending_commands.clear()
+
+        if self.mqtt_client:
+            try:
+                self.mqtt_client.loop_stop()
+                self.mqtt_client.disconnect()
+            except Exception:
+                pass
+
+    # --------------------------------------------------------------------------
+    # Callbacks MQTT
+    # --------------------------------------------------------------------------
+
+    def _on_mqtt_connect(self, client: Any, userdata: Any, flags: Any, reason_code: Any, properties: Any = None) -> None:
+        """Callback invocado al conectar o reconectar al broker MQTT."""
+        # En CallbackAPIVersion.VERSION2, reason_code == 0 indica conexión exitosa
+        if reason_code == 0:
+            logger.info("✓ Conectado exitosamente a Mosquitto (%s:%d). Suscribiendo a '%s' (QoS 1)...",
+                        self.mqtt_host, self.mqtt_port, self.cmd_topic)
+            client.subscribe(self.cmd_topic, qos=1)
+        else:
+            logger.warning("Falla al conectar con broker MQTT: %s", reason_code)
+
+    def _on_mqtt_disconnect(self, client: Any, userdata: Any, disconnect_flags: Any, reason_code: Any, properties: Any = None) -> None:
+        """Callback invocado ante desconexión del broker MQTT."""
+        logger.warning("Desconexión de Mosquitto (%s). El cliente intentará reconectar automáticamente con backoff.", reason_code)
+
+    def _on_mqtt_message(self, client: Any, userdata: Any, message: Any) -> None:
+        """Procesa mensajes que ingresan al tópico de comandos (tanques/cmd)."""
+        payload_str = message.payload.decode("utf-8", errors="replace").strip()
+        logger.debug("Mensaje MQTT recibido en %s: %s", message.topic, payload_str)
+        self.handle_incoming_command(payload_str)
+
+    # --------------------------------------------------------------------------
+    # Gestión de Comandos y Seguridad
+    # --------------------------------------------------------------------------
+
+    def handle_incoming_command(self, payload_str: str) -> None:
+        """
+        Valida el comando entrante:
+        - Sintaxis JSON.
+        - Timestamp (ts): si supera max_cmd_age_s (5 s), responde 'expired'.
+        - Deduplicación por 'id' en ventana deslizante.
+        - Si es válido, lo encola para envío serial y programa el timeout de 2.5 s.
+        """
+        try:
+            cmd = json.loads(payload_str)
+        except json.JSONDecodeError:
+            logger.warning("Comando descartado: formato no es un JSON válido: %s", payload_str)
+            return
+
+        cmd_id = str(cmd.get("id", ""))
+        if not cmd_id:
+            logger.warning("Comando descartado por carecer de campo 'id': %s", payload_str)
+            return
+
+        # 1. Validación de Expiración por Timestamp (ts)
+        now_epoch_ms = int(time.time() * 1000)
+        cmd_ts = cmd.get("ts")
+        if isinstance(cmd_ts, (int, float)):
+            age_s = (now_epoch_ms - cmd_ts) / 1000.0
+            if age_s > self.max_cmd_age_s:
+                logger.warning("Comando id='%s' EXPIRADO (antigüedad: %.2f s > %.1f s). No se envía al hardware.",
+                               cmd_id, age_s, self.max_cmd_age_s)
+                self.publish_ack({"ack": cmd_id, "ok": False, "reason": "expired"})
+                return
+
+        # 2. Deduplicación por 'id'
+        with self._lock:
+            if cmd_id in self._dedup_set:
+                logger.warning("Comando id='%s' DUPLICADO ignorado (ya procesado en la ventana actual).", cmd_id)
+                self.publish_ack({"ack": cmd_id, "ok": False, "reason": "duplicate"})
+                return
+
+            # Agregar a la ventana deslizante
+            if len(self._dedup_deque) >= self.dedup_window_size:
+                oldest_id = self._dedup_deque.popleft()
+                self._dedup_set.discard(oldest_id)
+            self._dedup_deque.append(cmd_id)
+            self._dedup_set.add(cmd_id)
+
+            # 3. Registrar comando pendiente y programar timer de 2.5 s
+            timer = threading.Timer(self.cmd_timeout_s, self._handle_command_timeout, args=(cmd_id,))
+            timer.daemon = True
+            self._pending_commands[cmd_id] = {
+                "timer": timer,
+                "created_at": time.time(),
+                "raw_cmd": cmd
+            }
+            timer.start()
+
+        # 4. Encolar comando serial
+        logger.info("Comando id='%s' validado y encolado hacia el equipo físico: %s", cmd_id, payload_str)
+        self.command_queue.put(payload_str)
+
+    def _handle_command_timeout(self, cmd_id: str) -> None:
+        """Callback ejecutado si el microcontrolador no responde en 2.5 segundos."""
+        with self._lock:
+            if cmd_id not in self._pending_commands:
+                return
+            del self._pending_commands[cmd_id]
+
+        logger.error("TIMEOUT: El equipo no respondió al comando id='%s' en %.1f s. Emitiendo 'device_timeout'.",
+                     cmd_id, self.cmd_timeout_s)
+        self.publish_ack({"ack": cmd_id, "ok": False, "reason": "device_timeout"})
+
+    def publish_ack(self, ack_payload: Dict[str, Any]) -> None:
+        """Publica la confirmación o rechazo en 'tanques/ack' con QoS 1 (sin retain)."""
+        if not self.mqtt_client:
+            logger.debug("No se puede publicar ack sin cliente MQTT: %s", ack_payload)
+            return
+
+        payload_bytes = json.dumps(ack_payload).encode("utf-8")
+        try:
+            self.mqtt_client.publish(self.ack_topic, payload_bytes, qos=1, retain=False)
+            logger.info("Ack publicado en %s (QoS 1): %s", self.ack_topic, ack_payload)
+        except Exception as e:
+            logger.error("Error al publicar ack en Mosquitto: %s", e)
+
+    # --------------------------------------------------------------------------
+    # Procesamiento de Líneas Entrantes desde el Dispositivo (Serial / Simulador)
+    # --------------------------------------------------------------------------
+
+    def process_device_line(self, raw_line: str) -> None:
+        """
+        Procesa una línea cruda recibida desde el microcontrolador o simulador:
+        - Si no es JSON o está corrupta: se ignora sin crashear.
+        - Si contiene el campo 'ack': se resuelve el comando pendiente y se publica en MQTT.
+        - Si es telemetría: se añade timestamp UTC oficial y se persiste en InfluxDB.
+        """
+        line = raw_line.strip()
+        if not line:
+            return
+
+        try:
+            data = json.loads(line)
+        except json.JSONDecodeError:
+            # El Arduino Uno emite texto de bootloader o ruido serial al resetear
+            logger.debug("Línea ignorada (no es JSON): %s", line)
+            return
+
+        if not isinstance(data, dict):
+            logger.debug("Línea JSON descartada (no es objeto dict): %s", line)
+            return
+
+        # ----------------------------------------------------------------------
+        # Caso A: Respuesta ACK de un comando
+        # ----------------------------------------------------------------------
+        if "ack" in data:
+            ack_id = str(data["ack"])
+            with self._lock:
+                pending = self._pending_commands.pop(ack_id, None)
+                if pending:
+                    timer: threading.Timer = pending.get("timer")
+                    if timer:
+                        timer.cancel()
+                    elapsed = time.time() - pending.get("created_at", time.time())
+                    logger.info("✓ ACK recibido del equipo para id='%s' (tiempo: %.3f s): ok=%s",
+                                ack_id, elapsed, data.get("ok"))
+                else:
+                    logger.warning("ACK recibido para comando id='%s' desconocido o ya expirado.", ack_id)
+
+            # Publicar el ack tal como vino en el canal MQTT
+            self.publish_ack(data)
+            return
+
+        # ----------------------------------------------------------------------
+        # Caso B: Trama periódica de Telemetría
+        # ----------------------------------------------------------------------
+        timestamp_ns = time.time_ns()
+        iso_time = datetime.fromtimestamp(timestamp_ns / 1e9, tz=timezone.utc).isoformat()
+
+        if not self.influx_writer:
+            return
+
+        influx_line = format_influx_line(data, timestamp_ns)
+        if not influx_line:
+            return
+
+        success = self.influx_writer.write_line_protocol(influx_line)
+        if success:
+            self.telemetry_success_count += 1
+            if self.log_interval > 0 and self.telemetry_success_count % self.log_interval == 0:
+                logger.info(
+                    "[%s] InfluxDB: %d tramas persistidas acumuladas (última seq=%d | A: %s%% | B: %s%% | Bomba: %s | Q: %.2f L/min)",
+                    iso_time,
+                    self.telemetry_success_count,
+                    data.get("seq", 0),
+                    data.get("tank_a", {}).get("level_pct"),
+                    data.get("tank_b", {}).get("level_pct"),
+                    data.get("actuators", {}).get("pump"),
+                    data.get("flow_lpm", 0.0)
+                )
 
 
-def stream_serial_with_reconnect(port: str, baudrate: int = 115200) -> Iterator[str]:
+# ==============================================================================
+# Hilos de Comunicación con el Hardware (Serial o Simulador)
+# ==============================================================================
+
+def run_serial_pipeline(bridge: TanquesBridge, port: str, baudrate: int = 115200) -> None:
     """
-    Abre el puerto serial desactivando DTR y RTS ANTES de abrirlo para evitar el reset del ESP32.
-    Si la conexión se interrumpe, reconecta automáticamente con backoff exponencial.
+    Gestiona la comunicación con el microcontrolador serial:
+    - Hilo único lector dueño del puerto.
+    - Cola de escritura secuencial de comandos.
+    - Reconexión continua con backoff exponencial sin crashear si el serial desaparece.
     """
-    try:
-        import serial  # type: ignore
-    except ImportError:
-        logger.error("pyserial no está instalado. Ejecute: pip install pyserial")
+    if serial is None:
+        logger.error("pyserial no está disponible. Ejecute: pip install pyserial")
         sys.exit(1)
 
     backoff = 1.0
     max_backoff = 30.0
 
-    while True:
+    while bridge.running:
         ser: Optional[serial.Serial] = None
+        writer_thread: Optional[threading.Thread] = None
         try:
-            logger.info("Intentando abrir puerto serial %s a %d baudios...", port, baudrate)
-            # Instanciar el objeto sin abrir el descriptor para desactivar DTR/RTS primero
+            logger.info("Intentando abrir puerto serial %s a %d baudios (DTR=False, RTS=False)...", port, baudrate)
             ser = serial.Serial()
             ser.port = port
             ser.baudrate = baudrate
-            ser.timeout = 2.0
-            ser.dtr = False  # Prevenir reset ESP32 en apertura
+            ser.timeout = 1.0
+            # Desactivar líneas de control antes de abrir para evitar reset del Arduino/ESP32
+            ser.dtr = False
             ser.rts = False
             ser.open()
-            
-            logger.info("Puerto serial %s conectado con éxito (DTR=False, RTS=False)", port)
-            backoff = 1.0  # Reset backoff tras conexión exitosa
 
-            while ser.is_open:
+            logger.info("✓ Puerto serial %s conectado exitosamente.", port)
+            backoff = 1.0  # Reset de backoff
+
+            # Hilo escritor que toma comandos de la cola y los escribe al serial
+            def _serial_writer() -> None:
+                while bridge.running and ser and ser.is_open:
+                    try:
+                        cmd_line = bridge.command_queue.get(timeout=0.5)
+                        data_to_send = (cmd_line.strip() + "\n").encode("utf-8")
+                        ser.write(data_to_send)
+                        ser.flush()
+                        logger.debug("Comando enviado al serial: %s", cmd_line)
+                    except queue.Empty:
+                        continue
+                    except Exception as err:
+                        logger.warning("Error escribiendo comando en serial: %s", err)
+                        break
+
+            writer_thread = threading.Thread(target=_serial_writer, daemon=True)
+            writer_thread.start()
+
+            # Bucle lector exclusivo del puerto
+            while bridge.running and ser.is_open:
                 line_bytes = ser.readline()
                 if not line_bytes:
-                    continue  # Timeout de lectura, seguir esperando
+                    continue
                 try:
                     line = line_bytes.decode("utf-8", errors="ignore")
-                    yield line
+                    bridge.process_device_line(line)
                 except Exception as dec_err:
                     logger.debug("Error decodificando línea serial: %s", dec_err)
 
         except (serial.SerialException, OSError) as e:
-            logger.warning("Error o desconexión en puerto serial %s: %s", port, e)
+            logger.warning("Aviso o desconexión en puerto serial %s: %s", port, e)
         except Exception as e:
-            logger.error("Error inesperado en puerto serial: %s", e)
+            logger.error("Error inesperado en gestión serial: %s", e)
         finally:
             if ser and ser.is_open:
                 try:
                     ser.close()
                 except Exception:
                     pass
+            if writer_thread and writer_thread.is_alive():
+                writer_thread.join(timeout=1.0)
 
-        logger.info("Reintentando conexión serial en %.1f segundos...", backoff)
-        time.sleep(backoff)
-        backoff = min(backoff * 2.0, max_backoff)
+        if bridge.running:
+            logger.info("Reintentando conexión serial en %.1f segundos...", backoff)
+            time.sleep(backoff)
+            backoff = min(backoff * 2.0, max_backoff)
 
 
-# ==============================================================================
-# Bucle Principal de Telemetría
-# ==============================================================================
-
-def run_bridge(
-    source_spec: str,
-    influx: InfluxWriter,
-    sim_speed: float = 1.0,
+def run_simulator_pipeline(
+    bridge: TanquesBridge,
+    sim_script: Optional[Path | str] = None,
     config_path: Optional[Path | str] = None,
-    log_interval: int = 30,
+    sim_speed: float = 1.0,
     pump_on: bool = False,
 ) -> None:
-    """Orquesta la lectura, timestamping y persistencia hacia InfluxDB."""
-    resolved_config = Path(config_path) if config_path else DEFAULT_CONFIG_PATH
+    """
+    Ejecuta el simulador en un subproceso con comunicación bidireccional:
+    - stdin conectado para recibir comandos.
+    - stdout leído por el hilo lector del bridge.
+    - Reconexión y respawn automático ante caídas del subproceso.
+    """
+    script_path = Path(sim_script) if sim_script else DEFAULT_SIM_PATH
+    cfg_path = Path(config_path) if config_path else DEFAULT_CONFIG_PATH
 
-    if source_spec == "stdin":
-        lines_iterator = stream_stdin()
-    elif source_spec.startswith("sim"):
-        args = ["--speed", str(sim_speed)]
-        if pump_on:
-            args.append("--pump-on")
-        lines_iterator = stream_simulator(
-            sim_script=DEFAULT_SIM_PATH,
-            config_path=resolved_config,
-            extra_args=args,
-            pump_on=pump_on,
-        )
-    elif source_spec.startswith("serial:"):
-        parts = source_spec[len("serial:"):].split(":")
-        port = parts[0]
-        baud = int(parts[1]) if len(parts) > 1 else 115200
-        lines_iterator = stream_serial_with_reconnect(port, baud)
-    else:
-        logger.error("Especificación de fuente desconocida: %s", source_spec)
-        sys.exit(1)
+    cmd = [sys.executable, str(script_path), "--config", str(cfg_path), "--speed", str(sim_speed)]
+    if pump_on:
+        cmd.append("--pump-on")
 
-    logger.info("Iniciando pipeline de bridge hacia InfluxDB org='%s', bucket='%s'", influx.org, influx.bucket)
+    backoff = 1.0
+    max_backoff = 30.0
 
-    success_count = 0
-
-    for raw_line in lines_iterator:
-        line = raw_line.strip()
-        if not line:
-            continue
-
-        # Filtrar o descartar respuestas ack de comandos si vinieran por el mismo canal
-        if '"ack"' in line:
-            logger.info("[COMMAND ACK RECIBIDO] %s", line)
-            continue
+    while bridge.running:
+        logger.info("Iniciando subproceso del simulador: %s", " ".join(cmd))
+        proc: Optional[subprocess.Popen[str]] = None
+        writer_thread: Optional[threading.Thread] = None
 
         try:
-            payload = json.loads(line)
-        except json.JSONDecodeError:
-            # Ignorar líneas de log espurias o incompletas de serial
-            logger.debug("Ignorando línea no JSON: %s", line)
-            continue
-
-        # ASIGNACIÓN DE TIMESTAMP OFICIAL DE INGESTA (Edge Computing)
-        # Nanosegundos desde epoch UTC
-        timestamp_ns = time.time_ns()
-        iso_time = datetime.fromtimestamp(timestamp_ns / 1e9, tz=timezone.utc).isoformat()
-
-        influx_line = format_influx_line(payload, timestamp_ns)
-        if not influx_line:
-            continue
-
-        success = influx.write_line_protocol(influx_line)
-        if success:
-            success_count += 1
-            logger.debug(
-                "[%s] Ingesta seq=%d | Tanque A: %s%% (%.1fg) | Tanque B: %s%% (%.1fg) | Bomba: %s | Q: %.2f L/min",
-                iso_time,
-                payload.get("seq", 0),
-                payload.get("tank_a", {}).get("level_pct"),
-                payload.get("tank_a", {}).get("weight_g", 0),
-                payload.get("tank_b", {}).get("level_pct"),
-                payload.get("tank_b", {}).get("weight_g", 0),
-                payload.get("actuators", {}).get("pump"),
-                payload.get("flow_lpm", 0.0)
+            proc = subprocess.Popen(
+                cmd,
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                bufsize=1
             )
-            if log_interval > 0 and success_count % log_interval == 0:
-                logger.info(
-                    "[%s] InfluxDB: %d escrituras exitosas acumuladas (última seq=%d | Tanque A: %s%% | Tanque B: %s%% | Bomba: %s | Q: %.2f L/min)",
-                    iso_time,
-                    success_count,
-                    payload.get("seq", 0),
-                    payload.get("tank_a", {}).get("level_pct"),
-                    payload.get("tank_b", {}).get("level_pct"),
-                    payload.get("actuators", {}).get("pump"),
-                    payload.get("flow_lpm", 0.0)
-                )
-        else:
-            logger.debug("No se pudo persistir la trama seq=%s en InfluxDB", payload.get("seq"))
 
+            # Hilo escritor hacia el stdin del simulador
+            def _sim_writer() -> None:
+                while bridge.running and proc and proc.poll() is None:
+                    try:
+                        cmd_line = bridge.command_queue.get(timeout=0.5)
+                        if proc and proc.stdin:
+                            proc.stdin.write(cmd_line.strip() + "\n")
+                            proc.stdin.flush()
+                            logger.debug("Comando enviado al simulador por stdin: %s", cmd_line)
+                    except queue.Empty:
+                        continue
+                    except Exception as err:
+                        logger.warning("Error escribiendo en stdin del simulador: %s", err)
+                        break
+
+            writer_thread = threading.Thread(target=_sim_writer, daemon=True)
+            writer_thread.start()
+
+            # Bucle lector de stdout del simulador
+            assert proc.stdout is not None
+            for raw_line in proc.stdout:
+                backoff = 1.0
+                bridge.process_device_line(raw_line)
+
+            ret_code = proc.wait(timeout=2)
+            logger.warning("El subproceso del simulador finalizó con código %s", ret_code)
+
+        except Exception as e:
+            logger.error("Error en comunicación con el subproceso del simulador: %s", e)
+        finally:
+            if proc:
+                try:
+                    proc.terminate()
+                    proc.wait(timeout=1)
+                except Exception:
+                    pass
+            if writer_thread and writer_thread.is_alive():
+                writer_thread.join(timeout=1.0)
+
+        if bridge.running:
+            logger.info("Reintentando lanzar el simulador en %.1f segundos...", backoff)
+            time.sleep(backoff)
+            backoff = min(backoff * 2.0, max_backoff)
+
+
+# ==============================================================================
+# Punto de Entrada Principal (CLI)
+# ==============================================================================
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Bridge Serial/Simulador -> InfluxDB 2.x (UTN FRSF)")
-    parser.add_argument("--source", type=str, default="sim",
-                        help="Fuente de datos: 'sim', 'stdin', o 'serial:<puerto>[:baud]' (ej: 'serial:COM3')")
+    parser = argparse.ArgumentParser(description="Bridge Serial/Simulador <-> MQTT / InfluxDB 2.x (UTN FRSF)")
+    parser.add_argument("--source", type=str,
+                        default=os.environ.get("BRIDGE_SOURCE", "sim"),
+                        help="Fuente de datos: 'sim', 'stdin', o 'serial:<puerto>[:baud]' (default: 'sim' o BRIDGE_SOURCE)")
+    parser.add_argument("--serial-port", type=str,
+                        default=os.environ.get("SERIAL_PORT", ""),
+                        help="Puerto serial si no se especifica en --source (ej: COM5 o /dev/ttyUSB0)")
+    parser.add_argument("--baudrate", type=int, default=115200,
+                        help="Velocidad en baudios para el puerto serial (default: 115200)")
     parser.add_argument("--sim-speed", type=float, default=1.0,
-                        help="Multiplicador de velocidad si se usa --source sim (ej: 5.0)")
+                        help="Multiplicador de velocidad si se usa --source sim")
     parser.add_argument("--pump-on", action="store_true",
-                        help="Inicia el simulador con la bomba encendida (para probar llenado e interlocks)")
+                        help="Inicia el simulador con la bomba encendida")
     parser.add_argument("--config", type=str, default=str(DEFAULT_CONFIG_PATH),
-                        help="Ruta al archivo config.yaml (default: relativo a la ubicación del script)")
+                        help="Ruta al archivo config.yaml")
     parser.add_argument("--log-every", type=int, default=30,
-                        help="Frecuencia de escrituras exitosas para emitir log INFO (default: 30)")
+                        help="Frecuencia de escrituras exitosas para emitir log INFO")
     parser.add_argument("--verbose", action="store_true",
-                        help="Habilita logs detallados por cada trama a nivel DEBUG")
+                        help="Habilita logs detallados a nivel DEBUG")
+
+    # InfluxDB
     parser.add_argument("--influx-url", type=str,
                         default=os.environ.get("INFLUX_URL", "http://localhost:8086"),
-                        help="URL base de InfluxDB 2.x (default: http://localhost:8086)")
+                        help="URL base de InfluxDB 2.x")
     parser.add_argument("--influx-token", type=str,
                         default=os.environ.get("INFLUX_TOKEN", "tanques-super-secret-token-2025"),
                         help="Token de autenticación InfluxDB 2.x")
@@ -424,6 +649,20 @@ def main() -> None:
     parser.add_argument("--influx-bucket", type=str,
                         default=os.environ.get("INFLUX_BUCKET", "tanques"),
                         help="Bucket de destino en InfluxDB")
+
+    # Mosquitto MQTT
+    parser.add_argument("--mqtt-host", type=str,
+                        default=os.environ.get("MQTT_HOST", "localhost"),
+                        help="Host del broker Mosquitto MQTT (default: localhost)")
+    parser.add_argument("--mqtt-port", type=int,
+                        default=int(os.environ.get("MQTT_PORT", "1883")),
+                        help="Puerto del broker Mosquitto MQTT (default: 1883)")
+    parser.add_argument("--mqtt-user", type=str,
+                        default=os.environ.get("MQTT_USER", "tanques"),
+                        help="Usuario para autenticación en Mosquitto MQTT")
+    parser.add_argument("--mqtt-password", type=str,
+                        default=os.environ.get("MQTT_PASSWORD", ""),
+                        help="Contraseña para autenticación en Mosquitto MQTT")
 
     args = parser.parse_args()
 
@@ -437,17 +676,51 @@ def main() -> None:
         bucket=args.influx_bucket
     )
 
+    bridge = TanquesBridge(
+        influx_writer=influx,
+        mqtt_host=args.mqtt_host,
+        mqtt_port=args.mqtt_port,
+        mqtt_user=args.mqtt_user,
+        mqtt_password=args.mqtt_password,
+        log_interval=args.log_every
+    )
+
+    # Iniciar conexión asíncrona MQTT
+    bridge.start_mqtt()
+
+    # Determinar fuente de datos
+    source = args.source
+    if source == "serial" and args.serial_port:
+        source = f"serial:{args.serial_port}:{args.baudrate}"
+    elif source == "sim" and args.serial_port and not sys.argv[1:]:
+        # Si se definió SERIAL_PORT por entorno y no se especificó --source explícito
+        source = f"serial:{args.serial_port}:{args.baudrate}"
+
     try:
-        run_bridge(
-            args.source,
-            influx,
-            sim_speed=args.sim_speed,
-            config_path=args.config,
-            log_interval=args.log_every,
-            pump_on=args.pump_on
-        )
+        if source.startswith("sim"):
+            run_simulator_pipeline(
+                bridge=bridge,
+                sim_script=DEFAULT_SIM_PATH,
+                config_path=args.config,
+                sim_speed=args.sim_speed,
+                pump_on=args.pump_on
+            )
+        elif source.startswith("serial:"):
+            parts = source[len("serial:"):].split(":")
+            port = parts[0]
+            baud = int(parts[1]) if len(parts) > 1 else args.baudrate
+            run_serial_pipeline(bridge=bridge, port=port, baudrate=baud)
+        elif source == "stdin":
+            logger.info("Leyendo líneas desde stdin (modo unidireccional)...")
+            for line in sys.stdin:
+                bridge.process_device_line(line)
+        else:
+            logger.error("Fuente desconocida: %s", source)
+            sys.exit(1)
     except KeyboardInterrupt:
         logger.info("Bridge detenido limpiamente por el usuario.")
+    finally:
+        bridge.stop()
 
 
 if __name__ == "__main__":
