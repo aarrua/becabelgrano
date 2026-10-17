@@ -13,4 +13,4 @@ datasources:
       defaultBucket: tanques
       tlsSkipVerify: true
     secureJsonData:
-      token: tanques-super-secret-token-2025
+      token: ${INFLUX_TOKEN}

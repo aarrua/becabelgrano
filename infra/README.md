@@ -135,3 +135,43 @@ docker compose up -d
 
 - **Verificar Grafana**:
   Abrir [http://localhost/grafana](http://localhost/grafana).
+
+---
+
+## 5. Rotación de Credenciales y Token de InfluxDB
+
+En InfluxDB 2.x, el modo de inicialización (`DOCKER_INFLUXDB_INIT_MODE=setup`) se ejecuta **únicamente la primera vez que se crea el volumen `influxdb_data`**. Si posteriormente se modifica el token (`INFLUX_TOKEN`) o la contraseña (`INFLUX_PASSWORD`) en `infra/.env`, InfluxDB ignora los nuevos valores y mantiene los existentes en el volumen de datos persistente.
+
+Para rotar el token de InfluxDB o resetear las credenciales maestras:
+
+1. **Detener la infraestructura y eliminar volúmenes persistentes**:
+   ```bash
+   cd infra
+   docker compose down -v
+   ```
+   > ⚠️ **ADVERTENCIA**: El flag `-v` destruye todos los datos persistidos en `influxdb_data`, `grafana_data` y `mosquitto_data`.
+
+2. **Actualizar las variables en `infra/.env`**:
+   Configurar el nuevo valor de `INFLUX_TOKEN`, `INFLUX_PASSWORD` y `MQTT_PASSWORD`.
+
+3. **Volver a levantar los contenedores**:
+   ```bash
+   docker compose up -d
+   ```
+
+4. **Regenerar obligatoriamente la clave de Mosquitto**:
+   Dado que el volumen o estado del broker fue reinicializado, se debe regenerar el hash de contraseñas de Mosquitto:
+   - **En Windows (PowerShell)**:
+     ```powershell
+     powershell -ExecutionPolicy Bypass -File mosquitto\init-passwords.ps1
+     docker compose restart mosquitto
+     ```
+   - **En Linux / macOS**:
+     ```bash
+     infra/mosquitto/init-passwords.sh
+     docker compose restart mosquitto
+     ```
+
+5. **Actualizar el token en los consumidores**:
+   Recordar definir el nuevo `INFLUX_TOKEN` tanto en el backend Spring Boot (`$env:INFLUX_TOKEN`) como en el bridge Python (`$env:INFLUX_TOKEN`).
+

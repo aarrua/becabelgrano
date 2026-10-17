@@ -13,10 +13,10 @@ services:
     environment:
       - DOCKER_INFLUXDB_INIT_MODE=setup
       - DOCKER_INFLUXDB_INIT_USERNAME=${INFLUX_USER:-admin}
-      - DOCKER_INFLUXDB_INIT_PASSWORD=${INFLUX_PASSWORD:-admin123456}
+      - DOCKER_INFLUXDB_INIT_PASSWORD=${INFLUX_PASSWORD:?definir INFLUX_PASSWORD en infra/.env}
       - DOCKER_INFLUXDB_INIT_ORG=${INFLUX_ORG:-utn-frsf}
       - DOCKER_INFLUXDB_INIT_BUCKET=${INFLUX_BUCKET:-tanques}
-      - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN=${INFLUX_TOKEN:-tanques-super-secret-token-2025}
+      - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN=${INFLUX_TOKEN:?definir INFLUX_TOKEN en infra/.env}
     volumes:
       - influxdb_data:/var/lib/influxdb2
     networks:
@@ -32,6 +32,9 @@ services:
     ports:
       - "${GRAFANA_PORT:-3000}:3000"
     environment:
+      # Credenciales de administrador Grafana
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:?definir GRAFANA_ADMIN_PASSWORD en infra/.env}
       # Acceso anónimo Viewer (el control de acceso y RBAC real reside en Spring Boot)
       - GF_AUTH_ANONYMOUS_ENABLED=true
       - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
@@ -43,7 +46,7 @@ services:
       - GF_SERVER_ROOT_URL=%(protocol)s://%(domain)s:%(http_port)s/grafana/
       - GF_USERS_ALLOW_SIGN_UP=false
       # Inyección de credenciales para provisioning de InfluxDB
-      - INFLUX_TOKEN=${INFLUX_TOKEN:-tanques-super-secret-token-2025}
+      - INFLUX_TOKEN=${INFLUX_TOKEN:?definir INFLUX_TOKEN en infra/.env}
       - INFLUX_ORG=${INFLUX_ORG:-utn-frsf}
       - INFLUX_BUCKET=${INFLUX_BUCKET:-tanques}
     volumes:

@@ -359,3 +359,22 @@ def test_mqtt_broker_down_at_startup() -> None:
     b.process_device_line("Línea de prueba sin crasheo")
     b.stop()
 
+
+def test_bridge_aborts_when_influx_token_missing(monkeypatch: pytest.MonkeyPatch) -> None:
+    """11. Si INFLUX_TOKEN no está definido, el bridge aborta con código 1."""
+    import sys
+    from edge.bridge import main
+    monkeypatch.delenv("INFLUX_TOKEN", raising=False)
+    monkeypatch.setattr(sys, "argv", ["bridge.py", "--source", "sim"])
+    with pytest.raises(SystemExit) as exc_info:
+        main()
+    assert exc_info.value.code == 1
+
+
+def test_influx_writer_raises_when_token_empty() -> None:
+    """12. InfluxWriter lanza ValueError si el token es nulo o vacío."""
+    from edge.bridge import InfluxWriter
+    with pytest.raises(ValueError, match="Token de autenticación InfluxDB"):
+        InfluxWriter(url="http://localhost:8086", token="", org="utn-frsf", bucket="tanques")
+
+
