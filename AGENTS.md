@@ -60,6 +60,7 @@ La arquitectura general está definida y no debe alterarse:
 9. **Umbral de Interlock de Sobrellenado**:
    - Configurado por defecto a **`85.0%`** (`overflow_threshold_pct: 85.0`) tanto en `edge/config.yaml` como en `application.yml`.
    - Permite compensar la inercia del volumen que continúa descargando el Tanque A hacia el Tanque B una vez apagada la bomba, garantizando que el Tanque B no supere el 99% de capacidad.
+   - **Nota de calibración con kit real**: La apertura manual de la llave de paso A $\to$ B altera drásticamente la tasa de descarga por gravedad hacia el tanque inferior; en el simulador el nivel pico acumulado en B alcanzó aproximadamente un ~97 % tras el apagado en 85 %. En la puesta en marcha definitiva con el kit físico se debe calibrar este umbral empíricamente y evaluar adicionalmente un corte preventivo por volumen total combinado ($V_A + V_B$).
 10. **Broker MQTT (Mosquitto) y Aislamiento de Red en Demostraciones**:
    - Mosquitto escucha en `0.0.0.0:1883` con autenticación obligatoria por usuario y contraseña (`allow_anonymous false`, contraseñas PBKDF2-SHA512).
    - En jornadas presenciales, demostraciones o eventos institucionales, el sistema debe operar indefectiblemente sobre una **red propia** (router Wi-Fi dedicado o hotspot/punto de acceso portátil propio), **nunca sobre la red institucional** (para prevenir aislamiento de clientes AP, filtrado o bloqueo de puertos MQTT/HTTP, o escaneos no autorizados en la red universitaria).
@@ -181,7 +182,7 @@ Al completar cada fase:
 4. **Firmware definitivo del Arduino Uno**:
    Implementación en C/C++ (Arduino) con emisión periódica de telemetría respetando el contrato JSON v1, recepción e interpretación de comandos seriales y los interlocks de seguridad definitivos de última barrera en el microcontrolador.
 5. **Calibrar el umbral del interlock (85 %) con el hardware físico real**:
-   La apertura manual de la llave de interconexión Tanque A $\to$ Tanque B altera la tasa de descarga por gravedad y la altura máxima acumulada en B. En la puesta en marcha con hardware se debe calibrar el umbral y considerar un interlock de corte por volumen total combinado ($V_A + V_B$).
+   La apertura manual de la llave de interconexión Tanque A $\to$ Tanque B altera la tasa de descarga por gravedad y la altura máxima acumulada en B (llegó a ~97 % en simulaciones con vaciado en tránsito). En la puesta en marcha con hardware se debe calibrar el umbral y considerar un interlock de corte por volumen total combinado ($V_A + V_B$).
 6. **Formato de Gauges en Grafana**:
    Los gauges del dashboard provisionado muestran actualmente valores como `0.100%`. Se debe configurar `Decimals = 1` en el JSON del dashboard (`infra/grafana/provisioning/dashboards/tanques-dashboard.json`).
 7. **Etiqueta dinámica de conexión del equipo en la SPA**:
