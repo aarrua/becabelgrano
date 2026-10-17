@@ -32,11 +32,19 @@ public class InfluxTelemetryProvider implements TelemetryProvider {
 
     @Autowired
     public InfluxTelemetryProvider(
-            @Value("${tanques.influx.url:http://localhost:8086}") String url,
-            @Value("${tanques.influx.token:tanques-super-secret-token-2025}") String token,
+            @Value("${tanques.influx.url:}") String url,
+            @Value("${tanques.influx.token:}") String token,
             @Value("${tanques.influx.org:utn-frsf}") String org,
             @Value("${tanques.influx.bucket:tanques}") String bucket
     ) {
+        if (url == null || url.trim().isEmpty()) {
+            log.error("ERROR DE CONFIGURACIÓN EN PRODUCCIÓN: La variable de entorno INFLUX_URL no está configurada o está vacía.");
+            throw new IllegalStateException("ERROR DE CONFIGURACIÓN EN PRODUCCIÓN: La variable de entorno INFLUX_URL no está configurada o está vacía.");
+        }
+        if (token == null || token.trim().isEmpty()) {
+            log.error("ERROR DE CONFIGURACIÓN EN PRODUCCIÓN: La variable de entorno INFLUX_TOKEN no está configurada o está vacía.");
+            throw new IllegalStateException("ERROR DE CONFIGURACIÓN EN PRODUCCIÓN: La variable de entorno INFLUX_TOKEN no está configurada o está vacía.");
+        }
         this.bucket = bucket;
         this.influxDBClient = InfluxDBClientFactory.create(url, token.toCharArray(), org, bucket);
     }

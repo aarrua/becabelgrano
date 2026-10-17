@@ -15,8 +15,9 @@ tanques:
     # En producción el secreto DEBE provenir de la variable de entorno JWT_SECRET (sin fallback)
     secret: ${JWT_SECRET}
   influx:
-    url: ${INFLUX_URL:http://localhost:8086}
-    token: ${INFLUX_TOKEN:tanques-super-secret-token-2025}
+    # En producción la URL y el token de InfluxDB DEBEN provenir de variables de entorno (sin fallback)
+    url: ${INFLUX_URL:}
+    token: ${INFLUX_TOKEN:}
     org: ${INFLUX_ORG:utn-frsf}
     bucket: ${INFLUX_BUCKET:tanques}
   cors:

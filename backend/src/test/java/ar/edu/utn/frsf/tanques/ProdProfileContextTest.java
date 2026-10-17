@@ -16,6 +16,8 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
         "JWT_SECRET=superSecretKeyForProdProfileTestAtLeast32Chars!",
         "DOCENTE_PASSWORD=docenteTestProdPass123",
         "ALUMNO_PASSWORD=alumnoTestProdPass123",
+        "INFLUX_URL=http://localhost:8086",
+        "INFLUX_TOKEN=testTokenAtLeastSomeCharsForProdTest",
         "spring.datasource.url=jdbc:h2:mem:tanquestestprod;DB_CLOSE_DELAY=-1",
         "tanques.mqtt.port=19999" // Puerto no disponible para verificar arranque tolerante con broker caído
 })
