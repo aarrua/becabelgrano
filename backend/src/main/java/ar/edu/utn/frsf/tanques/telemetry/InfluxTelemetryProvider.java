@@ -85,12 +85,12 @@ public class InfluxTelemetryProvider implements TelemetryProvider {
 
         Map<String, Object> fields = new HashMap<>();
         String mode = "auto";
+        Instant newestRecordTime = null;
 
         try {
             QueryApi queryApi = influxDBClient.getQueryApi();
             List<FluxTable> tables = queryApi.query(flux);
 
-            Instant newestRecordTime = null;
             for (FluxTable table : tables) {
                 for (FluxRecord record : table.getRecords()) {
                     String field = record.getField();

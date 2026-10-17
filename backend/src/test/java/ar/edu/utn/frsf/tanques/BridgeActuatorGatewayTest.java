@@ -15,7 +15,6 @@ import org.eclipse.paho.client.mqttv3.MqttClient;
 import org.eclipse.paho.client.mqttv3.MqttMessage;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.ObjectProvider;
 
 import java.util.Map;
@@ -65,7 +64,8 @@ class BridgeActuatorGatewayTest {
 
     @Test
     void testExecuteCommandSuccess() throws Exception {
-        // Al publicar el comando capturamos el id enviado y simulamos la llegada del ACK exitoso
+        // Al publicar el comando capturamos el id enviado y simulamos la llegada del
+        // ACK exitoso
         doAnswer(invocation -> {
             MqttMessage msg = invocation.getArgument(1);
             BridgeCommandMessage cmd = objectMapper.readValue(msg.getPayload(), BridgeCommandMessage.class);
@@ -110,9 +110,8 @@ class BridgeActuatorGatewayTest {
             return null;
         }).when(mqttClient).publish(eq(cmdTopic), any(MqttMessage.class));
 
-        InterlockViolationException ex = assertThrows(InterlockViolationException.class, () ->
-                gateway.executeCommand("pump", true, "docente")
-        );
+        InterlockViolationException ex = assertThrows(InterlockViolationException.class,
+                () -> gateway.executeCommand("pump", true, "docente"));
 
         assertEquals("pump", ex.getTarget());
         assertTrue(ex.isRequestedValue());
@@ -139,9 +138,8 @@ class BridgeActuatorGatewayTest {
             return null;
         }).when(mqttClient).publish(eq(cmdTopic), any(MqttMessage.class));
 
-        BridgeUnavailableException ex = assertThrows(BridgeUnavailableException.class, () ->
-                gateway.executeCommand("pump", true, "docente")
-        );
+        BridgeUnavailableException ex = assertThrows(BridgeUnavailableException.class,
+                () -> gateway.executeCommand("pump", true, "docente"));
 
         assertEquals("pump", ex.getTarget());
         assertEquals("expired", ex.getReason());
@@ -168,9 +166,8 @@ class BridgeActuatorGatewayTest {
             return null;
         }).when(mqttClient).publish(eq(cmdTopic), any(MqttMessage.class));
 
-        BridgeUnavailableException ex = assertThrows(BridgeUnavailableException.class, () ->
-                gateway.executeCommand("pump", true, "docente")
-        );
+        BridgeUnavailableException ex = assertThrows(BridgeUnavailableException.class,
+                () -> gateway.executeCommand("pump", true, "docente"));
 
         assertEquals("pump", ex.getTarget());
         assertEquals("device_timeout", ex.getReason());
@@ -183,9 +180,8 @@ class BridgeActuatorGatewayTest {
     @Test
     void testExecuteCommandTimeout3sWithoutAck() {
         // El cliente publica pero nadie responde con ACK
-        BridgeUnavailableException ex = assertThrows(BridgeUnavailableException.class, () ->
-                gateway.executeCommand("pump", true, "docente")
-        );
+        BridgeUnavailableException ex = assertThrows(BridgeUnavailableException.class,
+                () -> gateway.executeCommand("pump", true, "docente"));
 
         assertEquals("pump", ex.getTarget());
         assertEquals("bridge_unavailable", ex.getReason());
@@ -199,9 +195,8 @@ class BridgeActuatorGatewayTest {
     void testExecuteCommandBrokerDisconnected() {
         when(mqttClient.isConnected()).thenReturn(false);
 
-        BridgeUnavailableException ex = assertThrows(BridgeUnavailableException.class, () ->
-                gateway.executeCommand("pump", true, "docente")
-        );
+        BridgeUnavailableException ex = assertThrows(BridgeUnavailableException.class,
+                () -> gateway.executeCommand("pump", true, "docente"));
 
         assertEquals("pump", ex.getTarget());
         assertEquals("bridge_unavailable", ex.getReason());
@@ -255,8 +250,7 @@ class BridgeActuatorGatewayTest {
                 1.5,
                 Map.of("pump", true),
                 Map.of("overflow_a", false),
-                "auto"
-        );
+                "auto");
         when(telemetryProvider.getLatestTelemetry()).thenReturn(frame);
 
         Map<String, Boolean> state = gateway.getActuatorsState();
@@ -275,8 +269,7 @@ class BridgeActuatorGatewayTest {
                 0.0,
                 Map.of("pump", false),
                 Map.of("overflow_a", false),
-                "auto"
-        );
+                "auto");
         when(telemetryProvider.getLatestTelemetry()).thenReturn(staleFrame);
 
         Map<String, Boolean> state = gateway.getActuatorsState();
@@ -287,9 +280,8 @@ class BridgeActuatorGatewayTest {
 
     @Test
     void testInvalidTargetThrowsActuatorNotFoundException() {
-        assertThrows(ActuatorNotFoundException.class, () ->
-                gateway.executeCommand("valvula_inexistente", true, "docente")
-        );
+        assertThrows(ActuatorNotFoundException.class,
+                () -> gateway.executeCommand("valvula_inexistente", true, "docente"));
         verify(auditService).recordCommand("docente", "valvula_inexistente", true, false, "target_not_found");
     }
 
@@ -297,9 +289,8 @@ class BridgeActuatorGatewayTest {
     void testSendCommand_TurnOnWithStaleTelemetry_ThrowsInterlockViolationException() throws Exception {
         when(telemetryProvider.isTelemetryFresh()).thenReturn(false);
 
-        InterlockViolationException ex = assertThrows(InterlockViolationException.class, () ->
-                gateway.executeCommand("pump", true, "docente")
-        );
+        InterlockViolationException ex = assertThrows(InterlockViolationException.class,
+                () -> gateway.executeCommand("pump", true, "docente"));
 
         assertEquals("pump", ex.getTarget());
         assertTrue(ex.isRequestedValue());
