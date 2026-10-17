@@ -21,7 +21,7 @@ Funciones del Bridge:
    - Correlación asíncrona por 'id': si el equipo físico responde en < 2.5 s, publica el
      resultado en 'tanques/ack' (QoS 1). Si vence el timeout, emite 'device_timeout'.
 3. Resiliencia en el Borde:
-   - Desactiva DTR y RTS antes de abrir el puerto serial para evitar el reset del Arduino/ESP32.
+   - Desactiva DTR y RTS antes de abrir el puerto serial para evitar el reinicio del Arduino Uno (RESET por DTR).
    - Reconexión automática con backoff exponencial ante caídas del puerto serie y del broker MQTT.
    - Detección y aviso en el arranque si el reloj del sistema se encuentra desfasado.
    - Ignora líneas no JSON o ruido de arranque sin crashear.

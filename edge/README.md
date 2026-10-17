@@ -136,7 +136,7 @@ Se verificó experimentalmente contra la versión homologada **Mosquitto 2.0.22*
 
 ## 5. Guía de Instalación en Raspberry Pi 2 (Sin Docker)
 
-En la Raspberry Pi 2 (nodo de borde conectado físicamente al Arduino / ESP32 mediante USB), el bridge se ejecuta nativamente bajo Python 3 con un entorno virtual y se administra como servicio `systemd`.
+En la Raspberry Pi 2 (nodo de borde conectado físicamente al Arduino Uno mediante USB), el bridge se ejecuta nativamente bajo Python 3 con un entorno virtual y se administra como servicio `systemd`.
 
 > **Aviso sobre el usuario y rutas en Raspberry Pi OS**:
 > En instalaciones modernas de Raspberry Pi OS, el instalador no crea obligatoriamente el usuario `pi` sino que solicita definir uno personalizado (por ejemplo, `alumno`, `tanques`, etc.).

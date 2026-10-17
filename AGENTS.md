@@ -19,9 +19,9 @@
 La arquitectura general está definida y no debe alterarse:
 
 1. **Pipeline de Telemetría**:
-   `ESP32` $\xrightarrow{\text{Serial JSON 115200}}$ `edge/bridge.py (Python)` $\xrightarrow{\text{Line Protocol}}$ `InfluxDB 2.x` $\xrightarrow{}$ `Grafana (paneles embebidos por iframe)`
+   `Arduino Uno` $\xrightarrow{\text{Serial JSON 115200}}$ `edge/bridge.py (Python)` $\xrightarrow{\text{Line Protocol}}$ `InfluxDB 2.x` $\xrightarrow{}$ `Grafana (paneles embebidos por iframe)`
 2. **Pipeline de Control**:
-   `Frontend (React)` $\xrightarrow{\text{HTTP REST /api}}$ `nginx` $\xrightarrow{\text{Proxy}}$ `Spring Boot` $\xrightarrow{}$ `ActuatorGateway` $\xrightarrow{}$ `Bridge` $\xrightarrow{\text{Serial JSON}}$ `ESP32`
+   `Frontend (React)` $\xrightarrow{\text{HTTP REST /api}}$ `nginx` $\xrightarrow{\text{Proxy}}$ `Spring Boot` $\xrightarrow{}$ `ActuatorGateway` $\xrightarrow{}$ `Bridge` $\xrightarrow{\text{Serial JSON}}$ `Arduino Uno`
 3. **Punto de Entrada Único**:
    Un único servidor **nginx** expone:
    - `/`: Frontend web (build estático de React).
@@ -38,9 +38,9 @@ La arquitectura general está definida y no debe alterarse:
    - Seguridad con JWT stateless. Roles: `DOCENTE` (permisos de control de actuadores y auditoría) y `ALUMNO` (solo lectura).
    - Persistencia de usuarios y eventos de auditoría en base de datos H2 en disco (`./data/tanquesdb` con `AUTO_SERVER=TRUE`). La columna `target` en la entidad de auditoría posee valor por defecto `'pump'` (`columnDefinition = "varchar(64) default 'pump'"`) para compatibilidad retroactiva con registros previos a la migración.
    - Documentación viva de endpoints mediante OpenAPI 3 expuesta en `/swagger-ui.html` y `/v3/api-docs`.
-   - Aislamiento de perfiles: en perfil `dev` el backend corre localmente **sin Docker y sin ESP32** (con mocks en memoria sincronizados).
+   - Aislamiento de perfiles: en perfil `dev` el backend corre localmente **sin Docker y sin Arduino Uno** (con mocks en memoria sincronizados).
 5. **Timestamping**:
-   El ESP32 no tiene RTC. La Raspberry Pi asigna el timestamp oficial al momento de recibir la trama JSON e insertarla en InfluxDB.
+   El Arduino Uno no tiene RTC. La Raspberry Pi asigna el timestamp oficial al momento de recibir la trama JSON e insertarla en InfluxDB.
 6. **Geometría Configurable**:
    El área transversal de cada tanque (cilindros de distintos diámetros) y los factores de conversión deben residir en archivos de configuración (`edge/config.yaml` / `application.yml`), nunca hardcodeados.
 7. **Diseño Extensible de Actuadores**:
@@ -128,7 +128,7 @@ Cada commit debe respetar la especificación [Conventional Commits](https://www.
 - Python 3.10+.
 - Cumplimiento de **PEP 8** y anotaciones de tipo (*type hints*).
 - Manejo limpio de señales (`SIGINT`, `SIGTERM`) para cierre ordenado.
-- En comunicación serial (`pyserial`): **siempre** deshabilitar DTR y RTS (`dtr=False`, `rts=False`) antes de abrir el puerto para evitar reiniciar el ESP32.
+- En comunicación serial (`pyserial`): **siempre** deshabilitar DTR y RTS (`dtr=False`, `rts=False`) antes de abrir el puerto para evitar reiniciar el Arduino Uno.
 
 ### 5.3 Frontend (React 19 / TypeScript - Fase 3)
 - **Vite 8.3.4 + React 19.3.1 + TypeScript 7.0.2** en modo estricto.
@@ -172,14 +172,14 @@ Al completar cada fase:
    `InfluxTelemetryProvider` nunca se probó con datos reales generados por el bridge. Se debe verificar y confirmar que los valores mostrados en la SPA coincidan exactamente con los paneles de Grafana.
 2. **Servir el build del front (`dist/`) desde Nginx en `/`**:
    **Completado en Fase 4 (Etapa 1)**. `infra/docker-compose.yml` monta `frontend/dist/` en `/usr/share/nginx/html` y `infra/nginx/nginx.conf` resuelve rutas con `try_files $uri $uri/ /index.html;`.
-3. **Canal real de comandos backend $\to$ bridge $\to$ ESP32 / Arduino Uno**:
+3. **Canal real de comandos backend $\to$ bridge $\to$ Arduino Uno**:
    - **Completado en Fase 4 (Etapas 1, 2 y 3)**:
      - Mosquitto MQTT 2.0.22 autenticado con tópicos `tanques/cmd` y `tanques/ack` (Etapa 1).
      - Bridge Python bidireccional con hilo lector serial, cola de comandos, deduplicación y timeout (Etapa 2).
      - `BridgeActuatorGateway` en Spring Boot con Eclipse Paho 1.2.5, correlación de ACKs asíncrona no bloqueante, reconexión automática y tests completos (Etapa 3).
      - Resta Etapa 4 (verificación integral E2E en producción con Docker) y Etapa 5 (firmware).
-4. **Firmware definitivo del ESP32**:
-   Implementación en C/C++ (Arduino/ESP-IDF) con emisión periódica de telemetría respetando el contrato JSON v1, recepción e interpretación de comandos seriales y los interlocks de seguridad definitivos de última barrera en el microcontrolador.
+4. **Firmware definitivo del Arduino Uno**:
+   Implementación en C/C++ (Arduino) con emisión periódica de telemetría respetando el contrato JSON v1, recepción e interpretación de comandos seriales y los interlocks de seguridad definitivos de última barrera en el microcontrolador.
 5. **Calibrar el umbral del interlock (85 %) con el hardware físico real**:
    La apertura manual de la llave de interconexión Tanque A $\to$ Tanque B altera la tasa de descarga por gravedad y la altura máxima acumulada en B. En la puesta en marcha con hardware se debe calibrar el umbral y considerar un interlock de corte por volumen total combinado ($V_A + V_B$).
 6. **Formato de Gauges en Grafana**:

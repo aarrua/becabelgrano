@@ -11,7 +11,7 @@ La solución opera de forma autónoma en el borde (*Edge Computing*) sobre una R
 ```mermaid
 graph TD
     subgraph Campo ["Capa Física / Simulación"]
-        ESP32["ESP32 / edge/simulator.py<br/>(Sensores, Bomba, Interlocks)"]
+        Arduino["Arduino Uno / edge/simulator.py<br/>(Sensores, Bomba, Interlocks)"]
     end
 
     subgraph Edge ["Raspberry Pi (Edge Node)"]
@@ -37,7 +37,7 @@ graph TD
     end
 
     %% Flujo Telemetría
-    ESP32 -->|"Serial JSON (115200 bps)"| Bridge
+    Arduino -->|"Serial JSON (115200 bps)"| Bridge
     Bridge -->|"Line Protocol (Write)"| Influx
     Influx -->|"Flux / InfluxQL"| Grafana
     Influx -.->|"Telemetría Histórica (Prod)"| TP
@@ -56,7 +56,7 @@ graph TD
     API --> Sec
     Sec --> GW
     GW -->|"Comando JSON"| Bridge
-    Bridge -->|"Serial JSON"| ESP32
+    Bridge -->|"Serial JSON"| Arduino
     API --> H2
 ```
 
@@ -89,7 +89,7 @@ Consultá el detalle de cambios históricos en el [CHANGELOG.md](file:///c:/User
 
 ## 4. Guía de Ejecución Local para Desarrollo (`dev`)
 
-Durante el desarrollo no se requiere hardware físico (ESP32) ni componentes externos; cada subsistema puede correrse de manera independiente y desacoplada:
+Durante el desarrollo no se requiere hardware físico (Arduino Uno) ni componentes externos; cada subsistema puede correrse de manera independiente y desacoplada:
 
 ### 4.1 Infraestructura (InfluxDB + Grafana + Mosquitto + Nginx)
 Requiere Docker y Docker Compose:
@@ -167,7 +167,7 @@ npm run dev
 │   ├── 01-contrato-datos.md   # Especificación de telemetría y tramas seriales
 │   ├── 02-flujo-comandos.md   # Diagramas de secuencia y mecanismos de seguridad
 │   └── 03-api.md              # Documentación de endpoints REST y OpenAPI
-├── firmware/        # Especificación y código para ESP32
+├── firmware/        # Especificación y código para Arduino Uno
 ├── edge/            # Scripts Python para Raspberry Pi (simulador físico y bridge serial)
 ├── backend/         # Backend REST en Spring Boot 3.5.x (Java 21, Maven, JWT, H2)
 ├── infra/           # Orquestación con Docker Compose (InfluxDB, Grafana, nginx)

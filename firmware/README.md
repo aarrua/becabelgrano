@@ -1,12 +1,12 @@
-# Firmware ESP32 - Kit Didáctico de Tanques Interconectados (UTN FRSF / GITDA)
+# Firmware Arduino Uno - Kit Didáctico de Tanques Interconectados (UTN FRSF / GITDA)
 
-Este directorio contiene la especificación y el código fuente del firmware para el microcontrolador ESP32 del kit didáctico.
+Este directorio contiene la especificación y el código fuente del firmware para el microcontrolador Arduino Uno (ATmega328P) del kit didáctico.
 
 > **Estado actual**: Especificación de contrato y requerimientos para el desarrollo de hardware/firmware. La fase inicial del proyecto utiliza un simulador software (`edge/simulator.py`) que respeta rigurosamente este contrato.
 
 ---
 
-## 1. Responsabilidades del ESP32
+## 1. Responsabilidades del Arduino Uno
 
 1. **Lectura de sensores (frecuencia ~1 Hz)**:
    - Celda de carga / peso de Tanque A (`weight_g`) y cálculo de nivel (`level_pct`).
@@ -33,13 +33,13 @@ Este directorio contiene la especificación y el código fuente del firmware par
 - **Parity**: `None`
 - **Stop bits**: `1`
 - **Control de flujo**: Ninguno por hardware.
-- **Prevención de Reset**: En la Raspberry Pi, el driver `edge/bridge.py` configura `DTR=False` y `RTS=False` antes de abrir el puerto serial para evitar el reset automático del ESP32 mediante el circuito EN/DTR de la placa de desarrollo.
+- **Prevención de Reset**: En la Raspberry Pi, el driver `edge/bridge.py` configura `DTR=False` y `RTS=False` antes de abrir el puerto serial para evitar el reinicio automático del Arduino Uno provocado por la conmutación de la línea DTR acoplada capacitivamente al pin RESET del ATmega328P.
 
 ---
 
 ## 3. Contrato de Datos
 
-### 3.1 Telemetría (ESP32 $\to$ Raspberry Pi)
+### 3.1 Telemetría (Arduino Uno $\to$ Raspberry Pi)
 
 Cada segundo se envía una trama JSON en una única línea terminada en salto de línea (`\n`):
 
@@ -71,13 +71,13 @@ Cada segundo se envía una trama JSON en una única línea terminada en salto de
 }
 ```
 
-### 3.2 Comandos de Control (Raspberry Pi $\to$ ESP32)
+### 3.2 Comandos de Control (Raspberry Pi $\to$ Arduino Uno)
 
 ```json
 {"id": "c1", "cmd": "set", "target": "pump", "value": true}
 ```
 
-### 3.3 Confirmación / Rechazo de Comando (ESP32 $\to$ Raspberry Pi)
+### 3.3 Confirmación / Rechazo de Comando (Arduino Uno $\to$ Raspberry Pi)
 
 ```json
 {"ack": "c1", "ok": true}
@@ -93,6 +93,6 @@ O en caso de fallo/interlock activo:
 
 ## 4. Consideraciones Físicas y de Alcance
 
-1. **RTC**: El ESP32 no cuenta con reloj de tiempo real (RTC). El sellado de tiempo (*timestamping*) lo realiza la Raspberry Pi al momento de recibir la trama e ingresarla a InfluxDB.
+1. **RTC**: El Arduino Uno no cuenta con reloj de tiempo real (RTC). El sellado de tiempo (*timestamping*) lo realiza la Raspberry Pi al momento de recibir la trama e ingresarla a InfluxDB.
 2. **Válvulas**: Las llaves de paso entre tanques y drenajes son manuales. No existen actuadores ni sensores de estado de válvulas en el protocolo.
 3. **Temperatura**: Las lecturas térmicas son puramente de **monitoreo**. No existen placas Peltier ni elementos calefactores/refrigerantes en el sistema (fuera de alcance deliberadamente).

@@ -241,7 +241,7 @@ La base de datos H2 se persiste en el directorio local `./data/` de acuerdo con 
 ## 4. Ejecución del Backend
 
 ### Perfil Desarrollo (`dev`)
-No requiere Docker, ni ESP32 ni InfluxDB. Corre completamente autónomo con mocks sincronizados:
+No requiere Docker, ni Arduino Uno ni InfluxDB. Corre completamente autónomo con mocks sincronizados:
 ```bash
 cd backend
 mvn spring-boot:run -Dspring-boot.run.profiles=dev
