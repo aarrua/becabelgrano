@@ -31,6 +31,7 @@ public class InfluxTelemetryProvider implements TelemetryProvider {
     private volatile Instant lastTelemetryTimestamp = null;
 
     @Autowired
+    @SuppressWarnings("null")
     public InfluxTelemetryProvider(
             @Value("${tanques.influx.url:}") String url,
             @Value("${tanques.influx.token:}") String token,
@@ -52,6 +53,15 @@ public class InfluxTelemetryProvider implements TelemetryProvider {
     @Override
     public boolean isTelemetryFresh() {
         Instant ts = lastTelemetryTimestamp;
+        if (ts == null || Math.abs(java.time.Duration.between(ts, Instant.now()).toMillis()) > 5000) {
+            try {
+                getLatestTelemetry();
+                ts = lastTelemetryTimestamp;
+            } catch (Exception e) {
+                log.warn("No se pudo refrescar la telemetría desde InfluxDB para verificar frescura: {}", e.getMessage());
+                return false;
+            }
+        }
         if (ts == null) {
             return false;
         }
@@ -63,6 +73,7 @@ public class InfluxTelemetryProvider implements TelemetryProvider {
     }
 
     @Override
+    @SuppressWarnings("null")
     public TelemetryFrame getLatestTelemetry() {
         String flux = String.format(
                 "from(bucket: \"%s\") " +
@@ -87,13 +98,15 @@ public class InfluxTelemetryProvider implements TelemetryProvider {
                     if (field != null) {
                         fields.put(field, value);
                     }
-                    if (record.getTime() != null) {
-                        if (newestRecordTime == null || record.getTime().isAfter(newestRecordTime)) {
-                            newestRecordTime = record.getTime();
+                    Instant recordTime = record.getTime();
+                    if (recordTime != null) {
+                        if (newestRecordTime == null || recordTime.isAfter(newestRecordTime)) {
+                            newestRecordTime = recordTime;
                         }
                     }
-                    if (record.getValueByKey("mode") != null) {
-                        mode = record.getValueByKey("mode").toString();
+                    Object modeVal = record.getValueByKey("mode");
+                    if (modeVal != null) {
+                        mode = modeVal.toString();
                     }
                 }
             }
@@ -119,8 +132,11 @@ public class InfluxTelemetryProvider implements TelemetryProvider {
 
         double flowLpm = parseDouble(fields.get("flow_lpm"), 0.0);
 
+        boolean fresh = newestRecordTime != null
+                && Math.abs(java.time.Duration.between(newestRecordTime, Instant.now()).toMillis()) <= 5000;
+
         Map<String, Boolean> actuators = new HashMap<>();
-        if (isTelemetryFresh() && fields.containsKey("pump")) {
+        if (fresh && fields.containsKey("pump")) {
             actuators.put("pump", parseBoolean(fields.get("pump")));
         } else {
             actuators.put("pump", null);
