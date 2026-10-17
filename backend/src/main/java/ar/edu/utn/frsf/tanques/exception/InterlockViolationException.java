@@ -13,6 +13,13 @@ public class InterlockViolationException extends RuntimeException {
         this.reason = reason;
     }
 
+    public InterlockViolationException(String target, boolean requestedValue, String reason, String message) {
+        super(message);
+        this.target = target;
+        this.requestedValue = requestedValue;
+        this.reason = reason;
+    }
+
     public String getReason() {
         return reason;
     }

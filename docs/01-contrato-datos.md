@@ -11,11 +11,12 @@
 1. **Protocolo Serial**:
    - Trama orientada a líneas de texto en formato JSON terminadas por `\n` (`ASCII 0x0A` o `\r\n`).
    - Tasa de transmisión: **115200 bps**, 8 bits de datos, sin paridad, 1 bit de parada (8N1).
-   - Control de reset de la placa ESP32: El host (Raspberry Pi) debe inicializar la conexión con las líneas DTR y RTS desactivadas (`dtr=False`, `rts=False` en pySerial) antes de abrir el descriptor de archivo para evitar el reinicio automático del ESP32.
+   - Control de reset de la placa Arduino Uno: El host (Raspberry Pi) debe inicializar la conexión con las líneas DTR y RTS desactivadas (`dtr=False`, `rts=False` en pySerial) antes de abrir el descriptor de archivo para evitar el reinicio automático del Arduino Uno (generado por la conmutación de la línea DTR acoplada capacitivamente al pin RESET del ATmega328P).
 2. **Sincronización Temporal**:
-   - El microcontrolador ESP32 **no posee RTC** ni conexión directa a un servidor NTP.
-   - El ESP32 emite el contador de tiempo de ejecución `uptime_ms`.
-   - El sellado de tiempo canónico (*timestamp UTC*) lo estampa el script `edge/bridge.py` en la Raspberry Pi al momento de recibir y validar la trama antes de persistirla en InfluxDB.
+   - Ni el microcontrolador Arduino Uno ni la Raspberry Pi 2 **poseen RTC de hardware** con respaldo de batería.
+   - El Arduino Uno emite el contador de tiempo de ejecución `uptime_ms` (monótono incremental obtenido mediante `millis()`).
+   - **Sellado oficial en InfluxDB**: Para evitar problemas derivados de relojes desincronizados en el borde al arrancar sin acceso a internet o previo a la sincronización NTP, la telemetría se escribe en InfluxDB Line Protocol **sin timestamp explícito por defecto**. InfluxDB asigna automáticamente su hora oficial de recepción del servidor con precisión de nanosegundos.
+   - Para entornos con NTP verificado, el script `edge/bridge.py` ofrece la opción `--use-local-timestamp` para usar la marca de tiempo generada localmente en la Pi.
 3. **Topología Hidráulica y Mecánica**:
    - Dos tanques acoplados en serie: Tanque A (superior) y Tanque B (inferior/intermedio), que descargan hacia un reservorio.
    - Las secciones transversales (área en $\text{cm}^2$) de los cilindros son distintas y **no están fijas en el código**: residen en archivos de configuración (`edge/config.yaml` / `application.yml`).
@@ -26,7 +27,7 @@
 
 ---
 
-## 2. Telemetría Periódica (ESP32 $\to$ Raspberry Pi)
+## 2. Telemetría Periódica (Arduino Uno $\to$ Raspberry Pi)
 
 La telemetría se emite a una tasa nominal de **1 Hz (1 trama por segundo)**.
 
@@ -66,7 +67,7 @@ La telemetría se emite a una tasa nominal de **1 Hz (1 trama por segundo)**.
 |---|---|---|---|---|
 | `v` | Integer | - | `1` | Versión del esquema del contrato. Permite evolución hacia adelante. |
 | `seq` | Integer | - | `0` a `4294967295` | Número de secuencia incremental para detectar pérdidas de tramas. |
-| `uptime_ms` | Integer | ms | $\ge 0$ | Milisegundos transcurridos desde el arranque del ESP32. |
+| `uptime_ms` | Integer | ms | $\ge 0$ | Milisegundos transcurridos desde el arranque del Arduino Uno. |
 | **`tank_a`** | Object | - | - | Mediciones del Tanque A (tanque superior). |
 | `tank_a.weight_g` | Float | g (gramos) | `0.0` a `5000.0` | Masa líquida neta calculada por celda de carga tarada. |
 | `tank_a.level_pct` | Float | % | `0.0` a `100.0` | Nivel relativo de llenado según la capacidad máxima calibrada. |
@@ -86,7 +87,7 @@ La telemetría se emite a una tasa nominal de **1 Hz (1 trama por segundo)**.
 
 ---
 
-## 3. Comandos de Control (Raspberry Pi $\to$ ESP32)
+## 3. Comandos de Control (Raspberry Pi $\to$ Arduino Uno)
 
 Los comandos se envían a demanda cuando un usuario autorizado (`DOCENTE`) solicita modificar el estado de un actuador.
 
@@ -97,7 +98,8 @@ Los comandos se envían a demanda cuando un usuario autorizado (`DOCENTE`) solic
   "id": "c104",
   "cmd": "set",
   "target": "pump",
-  "value": true
+  "value": true,
+  "ts": 1740000000000
 }
 ```
 
@@ -109,10 +111,11 @@ Los comandos se envían a demanda cuando un usuario autorizado (`DOCENTE`) solic
 | `cmd` | String | Sí | `"set"` | Acción a ejecutar sobre el actuador. |
 | `target` | String | Sí | `"pump"` *(extensible)* | Nombre del actuador destino. El software debe estar desacoplado para incorporar otros actuadores en el futuro. |
 | `value` | Boolean / Variant | Sí | `true` \| `false` | Valor objetivo del actuador (para bomba: encender/apagar). |
+| `ts` | Integer | No | Epoch ms ($\ge 0$) | Marca de tiempo en milisegundos de generación del comando. Si difiere de la hora del bridge en más de `COMMAND_MAX_AGE_MS`, se descarta por seguridad. |
 
 ---
 
-## 4. Confirmación de Comando / Acknowledgment (ESP32 $\to$ Raspberry Pi)
+## 4. Confirmación de Comando / Acknowledgment (Arduino Uno $\to$ Raspberry Pi)
 
 El microcontrolador responde de forma síncrona/inmediata al procesar el comando.
 
@@ -145,3 +148,5 @@ Si un interlock de seguridad está activo (por ejemplo, el Tanque A o Tanque B s
 - `"unknown_target"`: El actuador especificado en `target` no existe o no está registrado.
 - `"invalid_command"`: Estructura de trama JSON no válida o comando no soportado.
 - `"invalid_value"`: El valor suministrado no coincide con el tipo esperado por el actuador.
+- `"expired"`: Comando descartado por el Bridge al superar la antigüedad máxima admisible (`COMMAND_MAX_AGE_MS`).
+- `"device_timeout"`: El dispositivo físico (Arduino Uno) no respondió con su ACK dentro del tiempo límite (2.5 s).

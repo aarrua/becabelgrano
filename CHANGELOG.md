@@ -9,16 +9,80 @@ y este proyecto adhiere a [Conventional Commits](https://www.conventionalcommits
 
 ## [Unreleased]
 
-### Planned (Fase 4 - Puesta en Marcha Integral, Integración en Producción y Firmware)
-- Prueba y validación del backend en perfil `prod` contra InfluxDB 2.x (`InfluxTelemetryProvider`) y verificación de consistencia con los dashboards de Grafana.
-- Despliegue de los artefactos estáticos compilados de la SPA (`frontend/dist/`) en el contenedor Nginx en la raíz `/`.
-- Implementación del canal bidireccional de comandos en `edge/bridge.py` (listener local) para despacho serial hacia el ESP32 / simulador y resolución de `BridgeActuatorGateway` (503).
-- Firmware definitivo para ESP32 con contrato JSON v1, parser de comandos e interlocks de hardware de última barrera.
-- Calibración del umbral de interlock del 85% con el kit físico y evaluación de corte por volumen total combinado (A+B).
-- Ajuste del formato de decimales en los gauges del dashboard de Grafana (`Decimals = 1`).
-- Etiqueta dinámica de conexión en la SPA según timestamp de última trama recibida (> 5 s sin datos).
-- Incorporación homogénea del campo `target` en todos los modelos de auditoría.
-- Validación visual de diseño en dispositivos móviles reales.
+### Added - Fase 4: Puesta en Marcha Integral (Etapa 1 - Mosquitto + Nginx Frontend)
+- **Broker MQTT Mosquitto (`infra/docker-compose.yml`)**:
+  - Incorporado servicio `tanques-mosquitto` con imagen fijada `eclipse-mosquitto:2.0.22` en el puerto `1883`.
+  - Configuración estricta en `infra/mosquitto/mosquitto.conf` con `allow_anonymous false` y almacenamiento de contraseñas hasheadas en `infra/mosquitto/passwords`.
+  - Scripts generadores de contraseñas multiplataforma (`infra/mosquitto/init-passwords.sh` y `infra/mosquitto/init-passwords.ps1`) utilizando el propio contenedor Docker para evitar dependencias locales del binario `mosquitto_passwd`, con validación estricta que aborta la ejecución si la contraseña está vacía o contiene el valor de ejemplo por defecto (`cambiar-esta-clave`).
+  - Reglas en `.gitignore` para garantizar que el archivo `passwords` nunca sea commiteado al repositorio.
+  - Tópicos definidos para el canal bidireccional de control con QoS 1: `tanques/cmd` (comandos del backend) y `tanques/ack` (confirmaciones/rechazos del bridge).
+  - Regla de aislamiento de red documentada en `AGENTS.md` (uso obligatorio de red propia / hotspot en demostraciones en lugar de la red institucional).
+- **Despliegue del Frontend Web en Nginx**:
+  - Configurado montaje en volumen de solo lectura de `../frontend/dist` hacia `/usr/share/nginx/html` en el contenedor `tanques-nginx`.
+  - Soporte de enrutamiento declarativo cliente para React Router mediante directiva `try_files $uri $uri/ /index.html;`, permitiendo navegación y recarga directa en subrutas (`/monitor`, `/audit`, `/login`).
+  - Documentación de compilación, proxies y puesta en marcha en `infra/README.md`, actualización de `README.md` y unificación de variables en `.env.example` y `infra/.env.example`.
+
+### Added - Fase 4: Puesta en Marcha Integral (Etapa 2 - Bridge con MQTT y Resiliencia Serial)
+- **Canal Bidireccional de Comandos en `edge/bridge.py`**:
+  - Incorporada integración con broker Mosquitto mediante librería `paho-mqtt==2.1.0` (pure Python sin extensiones C, compatible con Raspberry Pi 2 ARM 32-bit).
+  - Suscripción a `tanques/cmd` y publicación en `tanques/ack` con **QoS 1**, `clean_session=True` y sin flag retain.
+  - Validación de expiración de comandos en el borde: descarta comandos con antigüedad mayor a `COMMAND_MAX_AGE_MS` (default 5000 ms; 0 desactiva) según campo `ts` epoch ms y emite `{"ack": id, "ok": false, "reason": "expired"}` sin enviarlos al hardware.
+  - Deduplicación idempotente de comandos por `id` en ventana deslizante de 100 elementos: republica el ack original si ya fue resuelto o ignora en silencio si aún se encuentra pendiente de respuesta física, sin emitir jamás acks de fallo con motivo `duplicate`.
+  - Correlación asíncrona de acks por `id` con temporizador de 2.5 segundos: si el equipo físico no responde en ese lapso, emite `{"ack": id, "ok": false, "reason": "device_timeout"}`.
+  - Arquitectura concurrente robusta: un único hilo lector dueño del descriptor serial/stdout, cola secuencial de salida (`queue.Queue`) y mapa de comandos pendientes protegido por `threading.Lock()`.
+  - Discriminación por contenido entre tramas periódicas de telemetría (hacia InfluxDB 2.x) y tramas de respuesta ack (hacia Mosquitto MQTT).
+  - Descarte seguro de líneas no JSON o ruido generado durante el auto-reset del Arduino Uno al conectarse el USB.
+  - Reconexión tolerante con backoff exponencial ante caídas del broker MQTT, desconexiones del puerto serial físico o terminaciones del subproceso simulador.
+- **Manejo de Tiempo e InfluxDB en Borde (Raspberry Pi 2 sin RTC)**:
+  - Telemetría emitida en Line Protocol sin timestamp explícito por defecto (`use_server_timestamp=True`), permitiendo que InfluxDB aplique el sellado canónico oficial de recepción a nivel nanosegundo y protegiendo el histórico ante relojes desfasados al arrancar.
+  - Opción `--use-local-timestamp` para sellado local en entornos con sincronización NTP verificada.
+  - Chequeo de inicio con log de advertencia si el reloj del sistema reporta año menor a 2025 (desfase típico pre-NTP).
+  - Verificada la compatibilidad nativa de Mosquitto 2.0.22 con la propiedad `MessageExpiryInterval` de MQTT v5.
+- **Compatibilidad de Código y Dependencias**:
+  - Declarada compatibilidad estricta con **Python 3.9+** (evitando sintaxis posterior como uniones PEP 604 en `edge/simulator.py` y `edge/bridge.py`).
+  - Fijadas versiones exactas en `edge/requirements.txt`: `pyserial==3.5`, `pyyaml==6.0.2`, `influxdb-client==1.50.0` y `paho-mqtt==2.1.0`.
+  - Documentada la adopción de `PyYAML==6.0.2` como versión LTS estándar en Debian/Raspberry Pi OS (6.0.3 solo añade wheels binarias para Python 3.13/3.14 free-threaded).
+- **Seguridad y Servicio Systemd (`edge/systemd/tanques-bridge.service`)**:
+  - Lectura de credenciales (`MQTT_PASSWORD`, `INFLUX_TOKEN`) desde variables de entorno o archivo `edge/.env` con permisos restringidos `chmod 600`.
+  - Configurado usuario sin privilegios `User=pi`, `Group=pi` y grupo suplementario `SupplementaryGroups=dialout` para acceso a dispositivos seriales.
+  - Ejemplos de uso en CLI sin contraseñas explícitas en parámetros de comando.
+- **Herramienta de Diagnóstico (`edge/tools/send_cmd.py`)**:
+  - Script para publicar comandos de prueba con `id`, valor booleano (`true`/`false`), edad artificial del timestamp (`age_s`) y target configurable.
+- **Suite de Pruebas Automatizadas (20 tests en total)**:
+  - Ejecución conjunta de `edge/test_edge.py` (10 tests de física, simulación e interlocks) y `edge/tests/test_bridge.py` (10 tests del bridge bidireccional, incluyendo test de arranque con broker caído `test_mqtt_broker_down_at_startup`).
+
+### Added - Fase 4: Puesta en Marcha Integral (Etapa 3 - BridgeActuatorGateway Real con Paho MQTT y Resiliencia en Backend)
+- **Cliente MQTT Eclipse Paho 1.2.5 (`backend/pom.xml`)**:
+  - Incorporada dependencia `org.eclipse.paho:org.eclipse.paho.client.mqttv3:1.2.5` fijada exacta.
+  - Registrada decisión consciente en `AGENTS.md`: la línea v3 se encuentra madura y altamente probada en producción aunque sin nuevos releases desde julio de 2020 (a reevaluar frente a Paho v5); Spring Integration MQTT se descartó por simplicidad para dos tópicos fijos.
+- **Implementación de `BridgeActuatorGateway` en Perfil `prod`**:
+  - Publicación de comandos en tópico `tanques/cmd` con **QoS 1**, `clean_session=true`, sin flag `retain`, identificador único `c_<random_hex>` y timestamp `ts` en epoch ms.
+  - Correlación asíncrona de respuestas en `tanques/ack` mediante mapa concurrente de `CompletableFuture<BridgeAckMessage>`.
+  - **Threading no bloqueante estricto**: La espera de confirmación (`.get(3, TimeUnit.SECONDS)`) se realiza exclusivamente en el hilo del request HTTP; el callback `messageArrived` de Paho se limita a completar el future en memoria, previniendo el congelamiento del hilo despachador MQTT.
+  - **Resuscripción y Reconexión Automática**: Implementada interfaz `MqttCallbackExtended` que renueva la suscripción a `tanques/ack` (QoS 1) dentro de `connectComplete`. `clientId` único con sufijo aleatorio para evitar colisiones.
+  - **Prevención de Fugas de Memoria**: Limpieza garantizada del mapa de comandos pendientes (`pendingAcks.remove(cmdId)`) en bloque `finally` para comandos resueltos, vencidos o interrumpidos.
+  - **Arranque Tolerante a Broker Caído**: Bucle daemon en segundo plano (`connectLoop`) que intenta conectar a Mosquitto sin impedir el arranque del contenedor Spring Boot. Mientras el broker esté inaccesible, las solicitudes de control responden HTTP 503 (`reason: "bridge_unavailable"`).
+  - **Mapeo Semántico de Códigos HTTP y Mensajes de Seguridad**:
+    - Ack `ok=true` $\to$ HTTP 200 OK con confirmación auditada.
+    - Ack `ok=false` con motivo de interlock (`overflow_a`, `overflow_b`, `sensor_fault`) $\to$ HTTP 409 Conflict.
+    - Ack `ok=false` por `expired` o `device_timeout` $\to$ HTTP 503 Service Unavailable alertando que el estado físico es desconocido.
+    - Timeout de espera (3 segundos) sin ack del bridge $\to$ HTTP 503 Service Unavailable (`reason: "bridge_unavailable"`).
+- **Manejo de Estado Desconocido y Restricción de Encendido por Seguridad**:
+  - En `InfluxTelemetryProvider`, seguimiento de `lastTelemetryTimestamp` y método `isTelemetryFresh()` (umbral de 5000 ms). Ante telemetría desactualizada, se reporta `{"pump": null}`, evitando asumir falsamente que la bomba está apagada.
+  - `getActuatorsState()` en `BridgeActuatorGateway` delega en el proveedor de telemetría sin guardar estados ficticios en memoria.
+  - **Interlock de telemetría obsoleta**: El backend rechaza cualquier comando de encendido (`value: true`) si la telemetría no es reciente ($> 5$ s), retornando HTTP 409 Conflict (`reason: "telemetry_stale"`) y registrándolo en auditoría; el apagado (`value: false`) permanece siempre habilitado por parada de emergencia.
+- **Soporte de Frontend SPA (React + TypeScript)**:
+  - Actualizados tipos en `frontend/src/types/telemetry.ts` (`actuators: Record<string, boolean | null>`, campo `message` opcional).
+  - `PumpControl.tsx`: avatar y pill de estado ámbar (`avatar-unknown`, `state-unknown`) con etiqueta "DESCONOCIDO", advertencia explicativa de seguridad, botón "Encender Bomba" deshabilitado ante telemetría desactualizada, y botón "Forzar Apagado" habilitado para rol DOCENTE.
+  - `MonitorView.tsx`: indicador dinámico de conexión del equipo calculado a partir de `dataUpdatedAt` de TanStack Query ("Equipo Conectado", "Sin datos recientes", "Equipo Desconectado").
+  - `AuditTable.tsx`: columna y filtros compatibles con el atributo `target` persistido en base de datos H2 con valor por defecto `'pump'` para retrocompatibilidad.
+- **Suite de Pruebas Automatizadas (35 tests backend exitosos)**:
+  - 12 pruebas unitarias e integración en `BridgeActuatorGatewayTest`: comando exitoso (200), rechazo por interlock (409), rechazo de encendido por telemetría desactualizada (409 `telemetry_stale`), apagado permitido con telemetría vieja (200), comando expirado (503), timeout de dispositivo (503), timeout del gateway (503), broker desconectado (503), **test específico de reconexión tras caída del broker con recepción de acks**, telemetría fresca, telemetría obsoleta ($>5$ s $\to$ `null`) y target inválido (404).
+
+### Planned (Fase 4 - Próximas Etapas)
+- **Etapa 4**: Verificación integral en producción (Docker Compose + Bridge/Simulador + Backend prod + Frontend vía Nginx).
+- **Etapa 5**: Pendientes menores (decimales en gauges de Grafana, nota de calibración de interlock con hardware).
+- **Etapa 6**: Firmware definitivo para Arduino Uno (`firmware/tanques/tanques.ino` sin ArduinoJson, diagram.json de Wokwi, verificación de memoria RAM < 75%).
 
 ---
 

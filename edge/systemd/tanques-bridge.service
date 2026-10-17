@@ -1,0 +1,52 @@
+# ==============================================================================
+# Servicio Systemd para el Bridge de Telemetría y Control (UTN FRSF / GITDA)
+# Ubicación destino en Raspberry Pi: /etc/systemd/system/tanques-bridge.service
+# ==============================================================================
+
+[Unit]
+Description=Bridge Serial/MQTT para Kit Didáctico de Tanques Interconectados
+After=network.target network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# IMPORTANTE: Ajustar User, Group y las rutas (/home/<usuario>/...) si el usuario del sistema no es "pi"
+User=pi
+Group=pi
+SupplementaryGroups=dialout
+WorkingDirectory=/home/pi/becabelgrano/edge
+
+# Variables de entorno cargadas desde archivo .env protegido (chmod 600)
+# Debe contener: MQTT_PASSWORD=<clave>, INFLUX_TOKEN=<token>, etc.
+# Ajustar ruta al usuario real: /home/<usuario>/becabelgrano/edge/.env
+EnvironmentFile=-/home/pi/becabelgrano/edge/.env
+
+# Variables por defecto del entorno (sin secretos hardcodeados)
+Environment="PYTHONUNBUFFERED=1"
+Environment="INFLUX_URL=http://localhost:8086"
+Environment="INFLUX_ORG=utn-frsf"
+Environment="INFLUX_BUCKET=tanques"
+Environment="MQTT_HOST=localhost"
+Environment="MQTT_PORT=1883"
+Environment="MQTT_USER=tanques"
+Environment="COMMAND_MAX_AGE_MS=5000"
+
+# Ejecución desde entorno virtual de Python 3
+# En producción física, usar el enlace persistente por ID: /dev/serial/by-id/usb-Arduino...
+ExecStart=/home/pi/becabelgrano/edge/venv/bin/python3 /home/pi/becabelgrano/edge/bridge.py --source serial:/dev/ttyACM0:115200
+
+# Resiliencia y reinicio automático continuo
+Restart=always
+RestartSec=5s
+
+# Manejo de señales de cierre limpio
+KillSignal=SIGINT
+TimeoutStopSec=10s
+
+# Logging integrado con journald
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=tanques-bridge
+
+[Install]
+WantedBy=multi-user.target

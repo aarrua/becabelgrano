@@ -19,9 +19,9 @@
 La arquitectura general está definida y no debe alterarse:
 
 1. **Pipeline de Telemetría**:
-   `ESP32` $\xrightarrow{\text{Serial JSON 115200}}$ `edge/bridge.py (Python)` $\xrightarrow{\text{Line Protocol}}$ `InfluxDB 2.x` $\xrightarrow{}$ `Grafana (paneles embebidos por iframe)`
+   `Arduino Uno` $\xrightarrow{\text{Serial JSON 115200}}$ `edge/bridge.py (Python)` $\xrightarrow{\text{Line Protocol}}$ `InfluxDB 2.x` $\xrightarrow{}$ `Grafana (paneles embebidos por iframe)`
 2. **Pipeline de Control**:
-   `Frontend (React)` $\xrightarrow{\text{HTTP REST /api}}$ `nginx` $\xrightarrow{\text{Proxy}}$ `Spring Boot` $\xrightarrow{}$ `ActuatorGateway` $\xrightarrow{}$ `Bridge` $\xrightarrow{\text{Serial JSON}}$ `ESP32`
+   `Frontend (React)` $\xrightarrow{\text{HTTP REST /api}}$ `nginx` $\xrightarrow{\text{Proxy}}$ `Spring Boot` $\xrightarrow{}$ `ActuatorGateway` $\xrightarrow{}$ `Bridge` $\xrightarrow{\text{Serial JSON}}$ `Arduino Uno`
 3. **Punto de Entrada Único**:
    Un único servidor **nginx** expone:
    - `/`: Frontend web (build estático de React).
@@ -33,23 +33,36 @@ La arquitectura general está definida y no debe alterarse:
    - **OpenAPI 3 / Swagger UI**: `springdoc-openapi-starter-webmvc-ui: 2.8.16`.
    - **JWT**: `io.jsonwebtoken:jjwt-* 0.12.6`.
    - **InfluxDB Client**: `com.influxdb:influxdb-client-java 7.2.0`.
+   - **Cliente MQTT**: `org.eclipse.paho:org.eclipse.paho.client.mqttv3:1.2.5` fijada exacta.
+     > *Decisión arquitectónica consciente*: La línea Paho Java v3 (`1.2.5`) está madura y altamente estable en producción, aunque no tiene nuevos releases desde julio de 2020 (existe `org.eclipse.paho:org.eclipse.paho.mqttv5.client`, a reevaluar a futuro). Spring Integration MQTT se descartó conscientemente por simplicidad (evita sobrecarga de abstracciones de mensajería para dos tópicos fijos), no porque Paho no sea necesaria.
    - Seguridad con JWT stateless. Roles: `DOCENTE` (permisos de control de actuadores y auditoría) y `ALUMNO` (solo lectura).
-   - Persistencia de usuarios y eventos de auditoría en base de datos H2 en disco (`./data/tanquesdb` con `AUTO_SERVER=TRUE`).
+   - Persistencia de usuarios y eventos de auditoría en base de datos H2 en disco (`./data/tanquesdb` con `AUTO_SERVER=TRUE`). La columna `target` en la entidad de auditoría posee valor por defecto `'pump'` (`columnDefinition = "varchar(64) default 'pump'"`) para compatibilidad retroactiva con registros previos a la migración.
    - Documentación viva de endpoints mediante OpenAPI 3 expuesta en `/swagger-ui.html` y `/v3/api-docs`.
-   - Aislamiento de perfiles: en perfil `dev` el backend corre localmente **sin Docker y sin ESP32** (con mocks en memoria sincronizados).
+   - Aislamiento de perfiles: en perfil `dev` el backend corre localmente **sin Docker y sin Arduino Uno** (con mocks en memoria sincronizados).
 5. **Timestamping**:
-   El ESP32 no tiene RTC. La Raspberry Pi asigna el timestamp oficial al momento de recibir la trama JSON e insertarla en InfluxDB.
+   El Arduino Uno no tiene RTC. La Raspberry Pi asigna el timestamp oficial al momento de recibir la trama JSON e insertarla en InfluxDB.
 6. **Geometría Configurable**:
    El área transversal de cada tanque (cilindros de distintos diámetros) y los factores de conversión deben residir en archivos de configuración (`edge/config.yaml` / `application.yml`), nunca hardcodeados.
 7. **Diseño Extensible de Actuadores**:
    Actualmente el único actuador físico es la bomba (`pump`). El sistema modela el estado de actuadores como un mapa extensible (`Map<String, Boolean>`) y desacopla la validación de targets para que agregar nuevos actuadores futuros no requiera modificar la arquitectura.
-8. **Reglas Estrictas de Configuración en Producción (`prod`)**:
+8. **Reglas Estrictas de Configuración y Control en Producción (`prod`)**:
    - El secreto JWT (`JWT_SECRET`) es obligatorio, sin valor por defecto y con longitud mínima de 32 caracteres (256 bits).
    - Las contraseñas iniciales de `DOCENTE` y `ALUMNO` en producción deben definirse obligatoriamente en `${DOCENTE_PASSWORD}` y `${ALUMNO_PASSWORD}` sin fallbacks por defecto; la aplicación aborta su arranque si faltan.
-   - `BridgeActuatorGateway` en prod retorna HTTP `503 Service Unavailable` (`reason: "bridge_unavailable"`) y audita el rechazo mientras no exista el canal de comandos real hacia el bridge. No mantiene estado ficticio en memoria (su estado se deriva de la última telemetría).
+   - `BridgeActuatorGateway` opera en perfil `prod` mediante Paho MQTT:
+     - Publica en `tanques/cmd` con QoS 1, sin retain, `id` único y `ts` en epoch ms.
+     - Espera confirmación en `tanques/ack` con timeout de 3 segundos por comando.
+     - **Threading no bloqueante**: La espera con timeout (`future.get(3, SECONDS)`) se realiza indefectiblemente en el hilo del request HTTP, nunca dentro del callback `messageArrived` de Paho (evita bloquear el hilo despachador del cliente).
+     - **Reconexión y resuscripción**: Se implementa `MqttCallbackExtended` resuscribiéndose a `tanques/ack` (QoS 1) en `connectComplete`. Sesión limpia (`cleanSession=true`), sin retain, y `clientId` único con sufijo aleatorio (`tanques-backend-prod-<random>`).
+     - **Ciclo de vida sin fugas**: El mapa de comandos en vuelo (`pendingAcks`) se limpia en bloque `finally` tanto al resolver exitosamente como al agotarse el timeout o fallar la espera.
+     - **Arranque tolerante a fallas**: El backend no bloquea su inicio si Mosquitto está temporalmente caído (reintentos en hilo daemon background); mientras no hay conexión, responde HTTP 503 (`reason: "bridge_unavailable"`).
+     - **Manejo de estado desconocido**: Un timeout (3 s), `device_timeout` o `expired` retorna 503 informando estado desconocido. `getActuatorsState()` deriva el estado de la última telemetría en InfluxDB; si transcurrieron más de 5 segundos sin tramas, el actuador se reporta como `null` (desconocido), previniendo asumir falsamente que el actuador está apagado.
+     - **Restricción de encendido ante telemetría obsoleta**: Si la telemetría no es reciente ($> 5$ s), cualquier intento de encendido (`value: true`) es rechazado de inmediato con HTTP 409 Conflict (`reason: "telemetry_stale"`), impidiendo activar actuadores a ciegas; el apagado (`value: false`) permanece siempre permitido por seguridad física.
 9. **Umbral de Interlock de Sobrellenado**:
    - Configurado por defecto a **`85.0%`** (`overflow_threshold_pct: 85.0`) tanto en `edge/config.yaml` como en `application.yml`.
    - Permite compensar la inercia del volumen que continúa descargando el Tanque A hacia el Tanque B una vez apagada la bomba, garantizando que el Tanque B no supere el 99% de capacidad.
+10. **Broker MQTT (Mosquitto) y Aislamiento de Red en Demostraciones**:
+   - Mosquitto escucha en `0.0.0.0:1883` con autenticación obligatoria por usuario y contraseña (`allow_anonymous false`, contraseñas PBKDF2-SHA512).
+   - En jornadas presenciales, demostraciones o eventos institucionales, el sistema debe operar indefectiblemente sobre una **red propia** (router Wi-Fi dedicado o hotspot/punto de acceso portátil propio), **nunca sobre la red institucional** (para prevenir aislamiento de clientes AP, filtrado o bloqueo de puertos MQTT/HTTP, o escaneos no autorizados en la red universitaria).
 
 ---
 
@@ -115,7 +128,7 @@ Cada commit debe respetar la especificación [Conventional Commits](https://www.
 - Python 3.10+.
 - Cumplimiento de **PEP 8** y anotaciones de tipo (*type hints*).
 - Manejo limpio de señales (`SIGINT`, `SIGTERM`) para cierre ordenado.
-- En comunicación serial (`pyserial`): **siempre** deshabilitar DTR y RTS (`dtr=False`, `rts=False`) antes de abrir el puerto para evitar reiniciar el ESP32.
+- En comunicación serial (`pyserial`): **siempre** deshabilitar DTR y RTS (`dtr=False`, `rts=False`) antes de abrir el puerto para evitar reiniciar el Arduino Uno.
 
 ### 5.3 Frontend (React 19 / TypeScript - Fase 3)
 - **Vite 8.3.4 + React 19.3.1 + TypeScript 7.0.2** en modo estricto.
@@ -158,19 +171,23 @@ Al completar cada fase:
 1. **Probar el backend en perfil prod contra InfluxDB**:
    `InfluxTelemetryProvider` nunca se probó con datos reales generados por el bridge. Se debe verificar y confirmar que los valores mostrados en la SPA coincidan exactamente con los paneles de Grafana.
 2. **Servir el build del front (`dist/`) desde Nginx en `/`**:
-   Actualmente `infra/nginx/nginx.conf` sirve un `index.html` estático de placeholder. Se debe configurar el volumen o despliegue para servir `frontend/dist/` en el contenedor Nginx para producción.
-3. **Canal real de comandos backend $\to$ bridge $\to$ ESP32**:
-   Hoy `BridgeActuatorGateway` en prod devuelve HTTP `503 Service Unavailable` (`bridge_unavailable`). Debe construirse el canal de comandos (ej. listener HTTP REST local en `bridge.py` o socket IPC) para que el bridge despache la trama serial al microcontrolador y retorne el `ack` correspondiente, y debe poder probarse tanto con el simulador como con el hardware.
-4. **Firmware definitivo del ESP32**:
-   Implementación en C/C++ (Arduino/ESP-IDF) con emisión periódica de telemetría respetando el contrato JSON v1, recepción e interpretación de comandos seriales y los interlocks de seguridad definitivos de última barrera en el microcontrolador.
+   **Completado en Fase 4 (Etapa 1)**. `infra/docker-compose.yml` monta `frontend/dist/` en `/usr/share/nginx/html` y `infra/nginx/nginx.conf` resuelve rutas con `try_files $uri $uri/ /index.html;`.
+3. **Canal real de comandos backend $\to$ bridge $\to$ Arduino Uno**:
+   - **Completado en Fase 4 (Etapas 1, 2 y 3)**:
+     - Mosquitto MQTT 2.0.22 autenticado con tópicos `tanques/cmd` y `tanques/ack` (Etapa 1).
+     - Bridge Python bidireccional con hilo lector serial, cola de comandos, deduplicación y timeout (Etapa 2).
+     - `BridgeActuatorGateway` en Spring Boot con Eclipse Paho 1.2.5, correlación de ACKs asíncrona no bloqueante, reconexión automática y tests completos (Etapa 3).
+     - Resta Etapa 4 (verificación integral E2E en producción con Docker) y Etapa 5 (firmware).
+4. **Firmware definitivo del Arduino Uno**:
+   Implementación en C/C++ (Arduino) con emisión periódica de telemetría respetando el contrato JSON v1, recepción e interpretación de comandos seriales y los interlocks de seguridad definitivos de última barrera en el microcontrolador.
 5. **Calibrar el umbral del interlock (85 %) con el hardware físico real**:
    La apertura manual de la llave de interconexión Tanque A $\to$ Tanque B altera la tasa de descarga por gravedad y la altura máxima acumulada en B. En la puesta en marcha con hardware se debe calibrar el umbral y considerar un interlock de corte por volumen total combinado ($V_A + V_B$).
 6. **Formato de Gauges en Grafana**:
    Los gauges del dashboard provisionado muestran actualmente valores como `0.100%`. Se debe configurar `Decimals = 1` en el JSON del dashboard (`infra/grafana/provisioning/dashboards/tanques-dashboard.json`).
-7. **Etiqueta dinámica de conexión ESP32 en la SPA**:
-   La etiqueta "ESP32 Conectado" de la barra superior debe depender dinámicamente de la antigüedad de la última trama de telemetría recibida (marcar "Sin datos" o "Desconectado" si transcurrieron más de 5 segundos sin actualización), en lugar de mostrar un estado estático.
+7. **Etiqueta dinámica de conexión del equipo en la SPA**:
+   **Completado en Fase 4 (Etapa 3)**. La SPA calcula dinámicamente el estado a partir de la antigüedad de la telemetría (`dataUpdatedAt`), mostrando "Equipo Conectado" (verde), "Sin datos recientes" (ámbar, $>5$ s) o "Equipo Desconectado" (rojo, $>10$ s o error).
 8. **Registro de auditoría no incluye `target`**:
-   Verificar y garantizar la incorporación y consistencia del campo `target` en todos los flujos y modelos de auditoría entre backend y bridge.
+   **Completado en Fase 4 (Etapa 3)**. Incorporado en base de datos H2 con definición de columna `columnDefinition = "varchar(64) default 'pump'"` (garantizando compatibilidad retroactiva con registros previos a la migración), DTOs de auditoría y renderizado en columna de la SPA con tipo seguro.
 9. **Verificación del diseño en vista de celular**:
    El diseño responsivo para móviles quedó implementado con media queries y testeado funcionalmente, pero no se probó visualmente en un dispositivo físico real.
 

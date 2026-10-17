@@ -31,21 +31,23 @@ public class GlobalExceptionHandler {
                 ackId,
                 ex.getTarget(),
                 ex.isRequestedValue(),
-                ex.getReason()
+                ex.getReason(),
+                ex.getMessage()
         );
         return ResponseEntity.status(HttpStatus.CONFLICT).body(response);
     }
 
     @ExceptionHandler(BridgeUnavailableException.class)
     public ResponseEntity<ActuatorCommandResponse> handleBridgeUnavailable(BridgeUnavailableException ex) {
-        log.warn("Comando rechazado por puente no disponible: target='{}', valor={}, motivo='{}'",
-                ex.getTarget(), ex.isRequestedValue(), ex.getReason());
-        String ackId = "cmd_" + UUID.randomUUID().toString().substring(0, 8);
+        log.warn("Comando rechazado por puente no disponible o timeout: target='{}', valor={}, motivo='{}', detalle='{}'",
+                ex.getTarget(), ex.isRequestedValue(), ex.getReason(), ex.getMessage());
+        String ackId = ex.getAckId() != null ? ex.getAckId() : "cmd_" + UUID.randomUUID().toString().substring(0, 8);
         ActuatorCommandResponse response = ActuatorCommandResponse.rejected(
                 ackId,
                 ex.getTarget(),
                 ex.isRequestedValue(),
-                ex.getReason()
+                ex.getReason(),
+                ex.getMessage()
         );
         return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(response);
     }

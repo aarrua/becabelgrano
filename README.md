@@ -11,7 +11,7 @@ La solución opera de forma autónoma en el borde (*Edge Computing*) sobre una R
 ```mermaid
 graph TD
     subgraph Campo ["Capa Física / Simulación"]
-        ESP32["ESP32 / edge/simulator.py<br/>(Sensores, Bomba, Interlocks)"]
+        Arduino["Arduino Uno / edge/simulator.py<br/>(Sensores, Bomba, Interlocks)"]
     end
 
     subgraph Edge ["Raspberry Pi (Edge Node)"]
@@ -37,7 +37,7 @@ graph TD
     end
 
     %% Flujo Telemetría
-    ESP32 -->|"Serial JSON (115200 bps)"| Bridge
+    Arduino -->|"Serial JSON (115200 bps)"| Bridge
     Bridge -->|"Line Protocol (Write)"| Influx
     Influx -->|"Flux / InfluxQL"| Grafana
     Influx -.->|"Telemetría Histórica (Prod)"| TP
@@ -56,7 +56,7 @@ graph TD
     API --> Sec
     Sec --> GW
     GW -->|"Comando JSON"| Bridge
-    Bridge -->|"Serial JSON"| ESP32
+    Bridge -->|"Serial JSON"| Arduino
     API --> H2
 ```
 
@@ -81,25 +81,33 @@ graph TD
 | **Fase 1** | Simulador físico de tanques, bridge serial, InfluxDB, Grafana y nginx | **Completada** |
 | **Fase 2** | Backend Spring Boot (JWT, roles DOCENTE/ALUMNO, ActuatorGateway, auditoría H2) | **Completada** |
 | **Fase 3** | Frontend React SPA (Monitoreo, paneles Grafana embebidos, control seguro por roles) | **Completada** |
-| **Fase 4** | Puesta en marcha integral, integración en producción, bridge bidireccional y firmware | **Pendiente** |
+| **Fase 4** | Puesta en marcha integral, integración en producción, bridge bidireccional y firmware | **En curso (Etapas 1, 2 y 3 completadas)** |
 
 Consultá el detalle de cambios históricos en el [CHANGELOG.md](file:///c:/Users/Ale/OneDrive%20-%20UTN%20-%20Santa%20Fe/UTN%202025/Beca%20Belgrano/becabelgrano/CHANGELOG.md).
-
-
 
 ---
 
 ## 4. Guía de Ejecución Local para Desarrollo (`dev`)
 
-Durante el desarrollo no se requiere hardware físico (ESP32) ni componentes externos; cada subsistema puede correrse de manera independiente y desacoplada:
+Durante el desarrollo no se requiere hardware físico (Arduino Uno) ni componentes externos; cada subsistema puede correrse de manera independiente y desacoplada:
 
-### 4.1 Infraestructura de Datos (InfluxDB + Grafana + Nginx)
+### 4.1 Infraestructura (InfluxDB + Grafana + Mosquitto + Nginx)
 Requiere Docker y Docker Compose:
 ```bash
+# 1. Generar contraseñas de Mosquitto (requerido en el primer arranque)
+infra/mosquitto/init-passwords.sh       # Linux / macOS
+# o en Windows PowerShell:
+# powershell -ExecutionPolicy Bypass -File infra/mosquitto/init-passwords.ps1
+
+# 2. Compilar el frontend para que Nginx lo sirva en el puerto 80
+cd frontend && npm run build && cd ..
+
+# 3. Levantar los contenedores de infraestructura
 cd infra
 docker compose up -d
 ```
-* **Nginx Gateway**: `http://localhost` (puerto 80)
+* **Nginx Gateway / Frontend Web**: `http://localhost` (puerto 80, sirve `frontend/dist` con fallback a `index.html`)
+* **Mosquitto MQTT Broker**: `localhost:1883` (tópicos `tanques/cmd` y `tanques/ack`, auth requerida)
 * **Grafana**: `http://localhost/grafana` o `http://localhost:3000` (Viewer anónimo activado)
 * **InfluxDB**: `http://localhost:8086` (Org: `utn-frsf`, Bucket: `tanques`)
 
@@ -114,10 +122,21 @@ python edge/bridge.py --source sim --pump-on
 ```
 
 ### 4.3 Backend REST (Spring Boot 3.5.x)
-Requiere Java 21 y Maven. En perfil `dev` el backend corre **completamente autónomo** con base de datos H2 en `./data/` y mocks físicos sincronizados:
+Requiere Java 21 y Maven.
+- **Perfil `dev`** (autónomo sin Docker ni Mosquitto, con base H2 en `./data/` y mocks sincronizados):
 ```bash
 cd backend
 mvn spring-boot:run -Dspring-boot.run.profiles=dev
+```
+- **Perfil `prod`** (conectado a Mosquitto MQTT real para comandos e InfluxDB para telemetría):
+```bash
+cd backend
+# Exportar credenciales requeridas y ejecutar
+export MQTT_PASSWORD="<clave-generada-con-init-passwords>"
+export JWT_SECRET="clave-super-secreta-de-al-menos-32-caracteres-longitud"
+export DOCENTE_PASSWORD="<clave-docente>"
+export ALUMNO_PASSWORD="<clave-alumno>"
+mvn spring-boot:run -Dspring-boot.run.profiles=prod
 ```
 * **API REST**: `http://localhost:8080/api`
 * **Swagger UI / OpenAPI 3**: `http://localhost:8080/swagger-ui.html`
@@ -126,14 +145,14 @@ mvn spring-boot:run -Dspring-boot.run.profiles=dev
   * `docente` / `docente123` (rol `DOCENTE`)
   * `alumno` / `alumno123` (rol `ALUMNO`)
 
-### 4.4 Frontend SPA (React + Vite + TypeScript - Fase 3)
+### 4.4 Frontend SPA en Desarrollo (Vite HMR)
 Requiere Node.js 18+:
 ```bash
 cd frontend
 npm install
 npm run dev
 ```
-* **Dev Server**: `http://localhost:5173`
+* **Dev Server**: `http://localhost:5173` (con proxies hacia `/api` y `/grafana`)
 
 ---
 
@@ -148,7 +167,7 @@ npm run dev
 │   ├── 01-contrato-datos.md   # Especificación de telemetría y tramas seriales
 │   ├── 02-flujo-comandos.md   # Diagramas de secuencia y mecanismos de seguridad
 │   └── 03-api.md              # Documentación de endpoints REST y OpenAPI
-├── firmware/        # Especificación y código para ESP32
+├── firmware/        # Especificación y código para Arduino Uno
 ├── edge/            # Scripts Python para Raspberry Pi (simulador físico y bridge serial)
 ├── backend/         # Backend REST en Spring Boot 3.5.x (Java 21, Maven, JWT, H2)
 ├── infra/           # Orquestación con Docker Compose (InfluxDB, Grafana, nginx)

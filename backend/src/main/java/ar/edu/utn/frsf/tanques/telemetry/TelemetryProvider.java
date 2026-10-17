@@ -5,4 +5,8 @@ import ar.edu.utn.frsf.tanques.dto.TelemetryFrame;
 public interface TelemetryProvider {
 
     TelemetryFrame getLatestTelemetry();
+
+    default boolean isTelemetryFresh() {
+        return true;
+    }
 }

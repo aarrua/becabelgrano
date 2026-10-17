@@ -16,7 +16,7 @@ export interface TelemetryFrame {
   tank_a: TankTelemetry
   tank_b: TankTelemetry
   flow_lpm: number
-  actuators: Record<string, boolean>
+  actuators: Record<string, boolean | null>
   alarms: Record<string, boolean>
   mode: string
 }
@@ -42,6 +42,7 @@ export interface ActuatorCommandResponse {
   ack: string
   ok: boolean
   reason?: string | null
+  message?: string | null
   target: string
   value: boolean
   timestamp: string

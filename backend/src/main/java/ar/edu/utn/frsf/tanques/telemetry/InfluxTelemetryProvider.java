@@ -10,10 +10,12 @@ import com.influxdb.query.FluxTable;
 import jakarta.annotation.PreDestroy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
+import java.time.Instant;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -26,18 +28,52 @@ public class InfluxTelemetryProvider implements TelemetryProvider {
 
     private final InfluxDBClient influxDBClient;
     private final String bucket;
+    private volatile Instant lastTelemetryTimestamp = null;
 
+    @Autowired
+    @SuppressWarnings("null")
     public InfluxTelemetryProvider(
-            @Value("${tanques.influx.url:http://localhost:8086}") String url,
-            @Value("${tanques.influx.token:tanques-super-secret-token-2025}") String token,
+            @Value("${tanques.influx.url:}") String url,
+            @Value("${tanques.influx.token:}") String token,
             @Value("${tanques.influx.org:utn-frsf}") String org,
             @Value("${tanques.influx.bucket:tanques}") String bucket
     ) {
+        if (url == null || url.trim().isEmpty()) {
+            log.error("ERROR DE CONFIGURACIÓN EN PRODUCCIÓN: La variable de entorno INFLUX_URL no está configurada o está vacía.");
+            throw new IllegalStateException("ERROR DE CONFIGURACIÓN EN PRODUCCIÓN: La variable de entorno INFLUX_URL no está configurada o está vacía.");
+        }
+        if (token == null || token.trim().isEmpty()) {
+            log.error("ERROR DE CONFIGURACIÓN EN PRODUCCIÓN: La variable de entorno INFLUX_TOKEN no está configurada o está vacía.");
+            throw new IllegalStateException("ERROR DE CONFIGURACIÓN EN PRODUCCIÓN: La variable de entorno INFLUX_TOKEN no está configurada o está vacía.");
+        }
         this.bucket = bucket;
         this.influxDBClient = InfluxDBClientFactory.create(url, token.toCharArray(), org, bucket);
     }
 
     @Override
+    public boolean isTelemetryFresh() {
+        Instant ts = lastTelemetryTimestamp;
+        if (ts == null || Math.abs(java.time.Duration.between(ts, Instant.now()).toMillis()) > 5000) {
+            try {
+                getLatestTelemetry();
+                ts = lastTelemetryTimestamp;
+            } catch (Exception e) {
+                log.warn("No se pudo refrescar la telemetría desde InfluxDB para verificar frescura: {}", e.getMessage());
+                return false;
+            }
+        }
+        if (ts == null) {
+            return false;
+        }
+        return Math.abs(java.time.Duration.between(ts, Instant.now()).toMillis()) <= 5000;
+    }
+
+    public Instant getLastTelemetryTimestamp() {
+        return lastTelemetryTimestamp;
+    }
+
+    @Override
+    @SuppressWarnings("null")
     public TelemetryFrame getLatestTelemetry() {
         String flux = String.format(
                 "from(bucket: \"%s\") " +
@@ -49,6 +85,7 @@ public class InfluxTelemetryProvider implements TelemetryProvider {
 
         Map<String, Object> fields = new HashMap<>();
         String mode = "auto";
+        Instant newestRecordTime = null;
 
         try {
             QueryApi queryApi = influxDBClient.getQueryApi();
@@ -61,11 +98,19 @@ public class InfluxTelemetryProvider implements TelemetryProvider {
                     if (field != null) {
                         fields.put(field, value);
                     }
-                    if (record.getValueByKey("mode") != null) {
-                        mode = record.getValueByKey("mode").toString();
+                    Instant recordTime = record.getTime();
+                    if (recordTime != null) {
+                        if (newestRecordTime == null || recordTime.isAfter(newestRecordTime)) {
+                            newestRecordTime = recordTime;
+                        }
+                    }
+                    Object modeVal = record.getValueByKey("mode");
+                    if (modeVal != null) {
+                        mode = modeVal.toString();
                     }
                 }
             }
+            this.lastTelemetryTimestamp = newestRecordTime;
         } catch (Exception e) {
             log.error("Error consultando última telemetría en InfluxDB: {}", e.getMessage());
         }
@@ -87,8 +132,15 @@ public class InfluxTelemetryProvider implements TelemetryProvider {
 
         double flowLpm = parseDouble(fields.get("flow_lpm"), 0.0);
 
+        boolean fresh = newestRecordTime != null
+                && Math.abs(java.time.Duration.between(newestRecordTime, Instant.now()).toMillis()) <= 5000;
+
         Map<String, Boolean> actuators = new HashMap<>();
-        actuators.put("pump", parseBoolean(fields.get("pump")));
+        if (fresh && fields.containsKey("pump")) {
+            actuators.put("pump", parseBoolean(fields.get("pump")));
+        } else {
+            actuators.put("pump", null);
+        }
 
         Map<String, Boolean> alarms = new HashMap<>();
         alarms.put("overflow_a", parseBoolean(fields.get("overflow_a")));
