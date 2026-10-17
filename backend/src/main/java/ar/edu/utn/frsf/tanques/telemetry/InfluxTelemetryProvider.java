@@ -50,6 +50,14 @@ public class InfluxTelemetryProvider implements TelemetryProvider {
         this.influxDBClient = InfluxDBClientFactory.create(url, token.toCharArray(), org, bucket);
     }
 
+    /**
+     * Constructor para pruebas unitarias con cliente inyectado.
+     */
+    InfluxTelemetryProvider(InfluxDBClient influxDBClient, String bucket) {
+        this.bucket = bucket;
+        this.influxDBClient = influxDBClient;
+    }
+
     @Override
     public boolean isTelemetryFresh() {
         Instant ts = lastTelemetryTimestamp;
@@ -91,28 +99,43 @@ public class InfluxTelemetryProvider implements TelemetryProvider {
             QueryApi queryApi = influxDBClient.getQueryApi();
             List<FluxTable> tables = queryApi.query(flux);
 
-            for (FluxTable table : tables) {
-                for (FluxRecord record : table.getRecords()) {
-                    String field = record.getField();
-                    Object value = record.getValue();
-                    if (field != null) {
-                        fields.put(field, value);
-                    }
-                    Instant recordTime = record.getTime();
-                    if (recordTime != null) {
-                        if (newestRecordTime == null || recordTime.isAfter(newestRecordTime)) {
-                            newestRecordTime = recordTime;
+            if (tables != null) {
+                for (FluxTable table : tables) {
+                    for (FluxRecord record : table.getRecords()) {
+                        String field = record.getField();
+                        Object value = record.getValue();
+                        if (field != null) {
+                            fields.put(field, value);
                         }
-                    }
-                    Object modeVal = record.getValueByKey("mode");
-                    if (modeVal != null) {
-                        mode = modeVal.toString();
+                        Instant recordTime = record.getTime();
+                        if (recordTime != null) {
+                            if (newestRecordTime == null || recordTime.isAfter(newestRecordTime)) {
+                                newestRecordTime = recordTime;
+                            }
+                        }
+                        Object modeVal = record.getValueByKey("mode");
+                        if (modeVal != null) {
+                            mode = modeVal.toString();
+                        }
                     }
                 }
             }
             this.lastTelemetryTimestamp = newestRecordTime;
+        } catch (com.influxdb.exceptions.UnauthorizedException ue) {
+            log.warn("Error de autenticación con InfluxDB (token no autorizado o inválido): {}", ue.getMessage());
+            this.lastTelemetryTimestamp = null;
+        } catch (com.influxdb.exceptions.InfluxException ie) {
+            log.warn("Servicio de telemetría InfluxDB no disponible o falla de conexión: {}", ie.getMessage());
+            this.lastTelemetryTimestamp = null;
         } catch (Exception e) {
-            log.error("Error consultando última telemetría en InfluxDB: {}", e.getMessage());
+            log.error("Error inesperado al consultar telemetría en InfluxDB: {}", e.getMessage());
+            this.lastTelemetryTimestamp = null;
+        }
+
+        boolean hasRecords = newestRecordTime != null && !fields.isEmpty();
+        if (!hasRecords) {
+            log.warn("InfluxDB no contiene datos recientes de telemetría (resultado vacío o sin conexión)");
+            mode = "offline";
         }
 
         long seq = parseLong(fields.get("seq"), 0L);
@@ -132,7 +155,7 @@ public class InfluxTelemetryProvider implements TelemetryProvider {
 
         double flowLpm = parseDouble(fields.get("flow_lpm"), 0.0);
 
-        boolean fresh = newestRecordTime != null
+        boolean fresh = hasRecords
                 && Math.abs(java.time.Duration.between(newestRecordTime, Instant.now()).toMillis()) <= 5000;
 
         Map<String, Boolean> actuators = new HashMap<>();
@@ -145,7 +168,7 @@ public class InfluxTelemetryProvider implements TelemetryProvider {
         Map<String, Boolean> alarms = new HashMap<>();
         alarms.put("overflow_a", parseBoolean(fields.get("overflow_a")));
         alarms.put("overflow_b", parseBoolean(fields.get("overflow_b")));
-        alarms.put("sensor_fault", parseBoolean(fields.get("sensor_fault")));
+        alarms.put("sensor_fault", !hasRecords || parseBoolean(fields.get("sensor_fault")));
 
         return new TelemetryFrame(1, seq, uptimeMs, tankA, tankB, flowLpm, actuators, alarms, mode);
     }
