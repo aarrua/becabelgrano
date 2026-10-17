@@ -18,6 +18,7 @@ import org.eclipse.paho.client.mqttv3.persist.MemoryPersistence;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
@@ -61,6 +62,7 @@ public class BridgeActuatorGateway implements ActuatorGateway, MqttCallbackExten
     private MqttConnectOptions connectOptions;
     private volatile boolean running = true;
 
+    @Autowired
     public BridgeActuatorGateway(
             AuditService auditService,
             ObjectProvider<TelemetryProvider> telemetryProvider,
@@ -88,7 +90,7 @@ public class BridgeActuatorGateway implements ActuatorGateway, MqttCallbackExten
     }
 
     /**
-     * Constructor para pruebas con cliente MQTT inyectado.
+     * Constructor para pruebas con cliente MQTT inyectado (uso en tests).
      */
     public BridgeActuatorGateway(
             AuditService auditService,

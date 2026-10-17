@@ -10,6 +10,7 @@ import com.influxdb.query.FluxTable;
 import jakarta.annotation.PreDestroy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
@@ -29,6 +30,7 @@ public class InfluxTelemetryProvider implements TelemetryProvider {
     private final String bucket;
     private volatile Instant lastTelemetryTimestamp = null;
 
+    @Autowired
     public InfluxTelemetryProvider(
             @Value("${tanques.influx.url:http://localhost:8086}") String url,
             @Value("${tanques.influx.token:tanques-super-secret-token-2025}") String token,
