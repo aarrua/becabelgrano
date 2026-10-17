@@ -73,11 +73,11 @@ Para una verificación integral y desacoplada, se recomienda operar con 5 termin
 
 El bridge procesa la telemetría del equipo físico (o simulador de hardware) y escucha comandos seriales para relay bidireccional.
 
-1. Navegar a `edge/` y activar el entorno virtual de Python:
+1. Navegar a `edge/`:
    ```powershell
    cd edge
-   .\.venv\Scripts\Activate.ps1
    ```
+   *(Nota: Si usás entorno virtual `.venv`, activalo con `.\.venv\Scripts\Activate.ps1`. Si no lo creaste previamente, podés crearlo con `python -m venv .venv` y `pip install -r requirements.txt`, o ejecutar directamente con tu Python global si ya tiene las dependencias instaladas)*.
 
 2. Configurar el token de InfluxDB y la clave de Mosquitto en las variables de sesión:
    ```powershell
@@ -85,10 +85,12 @@ El bridge procesa la telemetría del equipo físico (o simulador de hardware) y 
    $env:MQTT_PASSWORD = "<TU_CLAVE_MOSQUITTO>"
    ```
 
-3. Iniciar el bridge con simulación serial activa:
+3. Iniciar el bridge con simulación interna activa:
    ```powershell
-   python bridge.py --simulate
+   python bridge.py --source sim
    ```
+   *(O para acelerar el llenado y verificar interlocks: `python bridge.py --source sim --pump-on --sim-speed 3.0`)*.
+
    *Salida esperada*: confirmación de conexión exitosa a Mosquitto (`Conectado al broker MQTT`), suscripción a `tanques/cmd`, e inserción periódica de puntos de telemetría en InfluxDB.
 
 ---
