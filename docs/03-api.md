@@ -52,14 +52,15 @@ Autentica al usuario contra la base de datos H2.
 **Request Body**:
 ```json
 {
-  "username": "docente",
-  "password": "docente123"
+  "username": "<usuario>",
+  "password": "<clave>"
 }
 ```
 
-*Credenciales sembradas por defecto en arranque*:
+*Credenciales sembradas en perfil local `dev` (`application-dev.yml`)*:
 - Docente: `username: "docente"`, `password: "docente123"`
 - Alumno: `username: "alumno"`, `password: "alumno123"`
+*(En perfil `prod` son provistas por variables de entorno)*.
 
 **Response (200 OK)**:
 ```json
