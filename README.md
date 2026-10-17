@@ -131,13 +131,16 @@ mvn spring-boot:run -Dspring-boot.run.profiles=dev
 - **Perfil `prod`** (conectado a Mosquitto MQTT real para comandos e InfluxDB para telemetría):
 ```bash
 cd backend
-# Exportar credenciales requeridas y ejecutar
+# Exportar credenciales requeridas y ejecutar (usar comillas en PowerShell para perfiles)
 export MQTT_PASSWORD="<clave-generada-con-init-passwords>"
 export JWT_SECRET="clave-super-secreta-de-al-menos-32-caracteres-longitud"
 export DOCENTE_PASSWORD="<clave-docente>"
 export ALUMNO_PASSWORD="<clave-alumno>"
-mvn spring-boot:run -Dspring-boot.run.profiles=prod
+export INFLUX_URL="http://localhost:8086"
+export INFLUX_TOKEN="<token-influxdb>"
+mvn spring-boot:run "-Dspring-boot.run.profiles=prod"
 ```
+*(Ver procedimiento detallado de 5 terminales y pruebas en [docs/05-verificacion-e2e.md](docs/05-verificacion-e2e.md))*.
 * **API REST**: `http://localhost:8080/api`
 * **Swagger UI / OpenAPI 3**: `http://localhost:8080/swagger-ui.html`
 * **Consola H2**: `http://localhost:8080/h2-console` (`JDBC URL: jdbc:h2:file:./data/tanquesdb`)
@@ -166,7 +169,8 @@ npm run dev
 ├── docs/            # Documentación técnica en Markdown (compatible con Obsidian)
 │   ├── 01-contrato-datos.md   # Especificación de telemetría y tramas seriales
 │   ├── 02-flujo-comandos.md   # Diagramas de secuencia y mecanismos de seguridad
-│   └── 03-api.md              # Documentación de endpoints REST y OpenAPI
+│   ├── 03-api.md              # Documentación de endpoints REST y OpenAPI
+│   └── 05-verificacion-e2e.md # Guía paso a paso de verificación integral E2E en producción
 ├── firmware/        # Especificación y código para Arduino Uno
 ├── edge/            # Scripts Python para Raspberry Pi (simulador físico y bridge serial)
 ├── backend/         # Backend REST en Spring Boot 3.5.x (Java 21, Maven, JWT, H2)
