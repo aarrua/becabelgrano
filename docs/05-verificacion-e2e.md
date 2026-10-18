@@ -129,6 +129,7 @@ El bridge procesa la telemetría del equipo físico (o simulador de hardware) y 
 Permite auditar el tráfico del bus de control sin interferir en el pipeline:
 
 ```powershell
+cd infra
 docker compose exec mosquitto mosquitto_sub -t "tanques/#" -u tanques -P "<TU_CLAVE_MOSQUITTO>" -v
 ```
 
