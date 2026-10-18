@@ -87,3 +87,8 @@ infra/mosquitto/passwords
 # Logs
 logs/
 *.log
+
+# Scripts y notas locales de prueba
+ayuda.md
+probar-e2e.ps1
+*.local.md

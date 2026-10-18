@@ -51,7 +51,8 @@
               }
             ]
           },
-          "unit": "percent"
+          "unit": "percent",
+          "decimals": 1
         },
         "overrides": []
       },
@@ -120,7 +121,8 @@
               }
             ]
           },
-          "unit": "percent"
+          "unit": "percent",
+          "decimals": 1
         },
         "overrides": []
       },
@@ -269,7 +271,8 @@
               }
             ]
           },
-          "unit": "L/min"
+          "unit": "L/min",
+          "decimals": 2
         },
         "overrides": []
       },
@@ -426,7 +429,8 @@
           },
           "max": 100,
           "min": 0,
-          "unit": "percent"
+          "unit": "percent",
+          "decimals": 1
         },
         "overrides": [
           {
@@ -519,7 +523,8 @@
             "showPoints": "never",
             "spanNulls": false
           },
-          "unit": "celsius"
+          "unit": "celsius",
+          "decimals": 1
         },
         "overrides": [
           {

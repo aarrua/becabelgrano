@@ -90,9 +90,17 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(body);
     }
 
-    @ExceptionHandler(Exception.class)
-    public ResponseEntity<Map<String, Object>> handleGeneralException(Exception ex) {
-        log.error("Error interno no controlado: ", ex);
+    @ExceptionHandler(com.influxdb.exceptions.InfluxException.class)
+    public ResponseEntity<Map<String, Object>> handleInfluxException(com.influxdb.exceptions.InfluxException ex) {
+        log.warn("Servicio de telemetría InfluxDB no disponible o falla de autenticación: {}", ex.getMessage());
+        Map<String, Object> body = buildErrorBody(HttpStatus.SERVICE_UNAVAILABLE, "Servicio de telemetría no disponible");
+        body.put("reason", "telemetry_unavailable");
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(body);
+    }
+
+    @ExceptionHandler(Throwable.class)
+    public ResponseEntity<Map<String, Object>> handleFallbackThrowable(Throwable th) {
+        log.error("Fallo inesperado no controlado: ", th);
         Map<String, Object> body = buildErrorBody(HttpStatus.INTERNAL_SERVER_ERROR, "Error interno del servidor");
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(body);
     }

@@ -78,8 +78,10 @@ class InfluxWriter:
     """Cliente HTTP liviano para InfluxDB 2.x compatible con Line Protocol."""
 
     def __init__(self, url: str, token: str, org: str, bucket: str, timeout: float = 3.0) -> None:
+        if not token or not str(token).strip():
+            raise ValueError("Token de autenticación InfluxDB 2.x no configurado o vacío.")
         self.url = url.rstrip("/")
-        self.token = token
+        self.token = token.strip()
         self.org = org
         self.bucket = bucket
         self.timeout = timeout
@@ -779,7 +781,7 @@ def main() -> None:
                         default=os.environ.get("INFLUX_URL", "http://localhost:8086"),
                         help="URL base de InfluxDB 2.x (default: $INFLUX_URL o http://localhost:8086)")
     parser.add_argument("--influx-token", type=str,
-                        default=os.environ.get("INFLUX_TOKEN", "tanques-super-secret-token-2025"),
+                        default=os.environ.get("INFLUX_TOKEN"),
                         help="Token de autenticación InfluxDB 2.x (default: $INFLUX_TOKEN)")
     parser.add_argument("--influx-org", type=str,
                         default=os.environ.get("INFLUX_ORG", "utn-frsf"),
@@ -803,6 +805,13 @@ def main() -> None:
                         help="Contraseña para autenticación en Mosquitto MQTT (default: $MQTT_PASSWORD)")
 
     args = parser.parse_args()
+
+    if not args.influx_token or not args.influx_token.strip():
+        logger.error(
+            "ERROR DE CONFIGURACIÓN: No se configuró el token de autenticación de InfluxDB. "
+            "Defina la variable de entorno INFLUX_TOKEN o use el parámetro --influx-token."
+        )
+        sys.exit(1)
 
     if args.verbose:
         logger.setLevel(logging.DEBUG)

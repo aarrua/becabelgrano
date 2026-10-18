@@ -60,6 +60,7 @@ La arquitectura general está definida y no debe alterarse:
 9. **Umbral de Interlock de Sobrellenado**:
    - Configurado por defecto a **`85.0%`** (`overflow_threshold_pct: 85.0`) tanto en `edge/config.yaml` como en `application.yml`.
    - Permite compensar la inercia del volumen que continúa descargando el Tanque A hacia el Tanque B una vez apagada la bomba, garantizando que el Tanque B no supere el 99% de capacidad.
+   - **Nota de calibración con kit real**: La apertura manual de la llave de paso A $\to$ B altera drásticamente la tasa de descarga por gravedad hacia el tanque inferior; en el simulador el nivel pico acumulado en B alcanzó aproximadamente un ~97 % tras el apagado en 85 %. En la puesta en marcha definitiva con el kit físico se debe calibrar este umbral empíricamente y evaluar adicionalmente un corte preventivo por volumen total combinado ($V_A + V_B$).
 10. **Broker MQTT (Mosquitto) y Aislamiento de Red en Demostraciones**:
    - Mosquitto escucha en `0.0.0.0:1883` con autenticación obligatoria por usuario y contraseña (`allow_anonymous false`, contraseñas PBKDF2-SHA512).
    - En jornadas presenciales, demostraciones o eventos institucionales, el sistema debe operar indefectiblemente sobre una **red propia** (router Wi-Fi dedicado o hotspot/punto de acceso portátil propio), **nunca sobre la red institucional** (para prevenir aislamiento de clientes AP, filtrado o bloqueo de puertos MQTT/HTTP, o escaneos no autorizados en la red universitaria).
@@ -169,21 +170,23 @@ Al completar cada fase:
 ## 7. Pendientes Conocidos y Próximos Pasos (Fase 4)
 
 1. **Probar el backend en perfil prod contra InfluxDB**:
-   `InfluxTelemetryProvider` nunca se probó con datos reales generados por el bridge. Se debe verificar y confirmar que los valores mostrados en la SPA coincidan exactamente con los paneles de Grafana.
+   **Completado en Fase 4 (Etapas 4 y 5)**. Verificado integralmente de punta a punta con datos del bridge y simulador, y robustecido ante caídas de InfluxDB o token inválido reportando estado desconocido de actuador (`null`), modo offline y alarma de sensor activa sin lanzar HTTP 500.
 2. **Servir el build del front (`dist/`) desde Nginx en `/`**:
    **Completado en Fase 4 (Etapa 1)**. `infra/docker-compose.yml` monta `frontend/dist/` en `/usr/share/nginx/html` y `infra/nginx/nginx.conf` resuelve rutas con `try_files $uri $uri/ /index.html;`.
 3. **Canal real de comandos backend $\to$ bridge $\to$ Arduino Uno**:
-   - **Completado en Fase 4 (Etapas 1, 2 y 3)**:
+   - **Completado en Fase 4 (Etapas 1, 2, 3, 4 y 5)**:
      - Mosquitto MQTT 2.0.22 autenticado con tópicos `tanques/cmd` y `tanques/ack` (Etapa 1).
      - Bridge Python bidireccional con hilo lector serial, cola de comandos, deduplicación y timeout (Etapa 2).
      - `BridgeActuatorGateway` en Spring Boot con Eclipse Paho 1.2.5, correlación de ACKs asíncrona no bloqueante, reconexión automática y tests completos (Etapa 3).
-     - Resta Etapa 4 (verificación integral E2E en producción con Docker) y Etapa 5 (firmware).
+     - Verificación integral E2E en producción (Etapa 4).
+     - Pulido de visualización, resiliencia y documentación operativa sin secretos en `docs/05-verificacion-e2e.md` (Etapa 5).
+     - Pendiente: Firmware en Arduino Uno (Etapa 6).
 4. **Firmware definitivo del Arduino Uno**:
    Implementación en C/C++ (Arduino) con emisión periódica de telemetría respetando el contrato JSON v1, recepción e interpretación de comandos seriales y los interlocks de seguridad definitivos de última barrera en el microcontrolador.
 5. **Calibrar el umbral del interlock (85 %) con el hardware físico real**:
-   La apertura manual de la llave de interconexión Tanque A $\to$ Tanque B altera la tasa de descarga por gravedad y la altura máxima acumulada en B. En la puesta en marcha con hardware se debe calibrar el umbral y considerar un interlock de corte por volumen total combinado ($V_A + V_B$).
+   La apertura manual de la llave de interconexión Tanque A $\to$ Tanque B altera la tasa de descarga por gravedad y la altura máxima acumulada en B (llegó a ~97 % en simulaciones con vaciado en tránsito). En la puesta en marcha con hardware se debe calibrar el umbral y considerar un interlock de corte por volumen total combinado ($V_A + V_B$).
 6. **Formato de Gauges en Grafana**:
-   Los gauges del dashboard provisionado muestran actualmente valores como `0.100%`. Se debe configurar `Decimals = 1` en el JSON del dashboard (`infra/grafana/provisioning/dashboards/tanques-dashboard.json`).
+   **Completado en Fase 4 (Etapa 5)**. Configurado `decimals = 1` en gauges y series temporales de nivel de tanques, `decimals = 2` en caudal, y `decimals = 1` en temperatura dentro de `infra/grafana/provisioning/dashboards/json/tanques.json`.
 7. **Etiqueta dinámica de conexión del equipo en la SPA**:
    **Completado en Fase 4 (Etapa 3)**. La SPA calcula dinámicamente el estado a partir de la antigüedad de la telemetría (`dataUpdatedAt`), mostrando "Equipo Conectado" (verde), "Sin datos recientes" (ámbar, $>5$ s) o "Equipo Desconectado" (rojo, $>10$ s o error).
 8. **Registro de auditoría no incluye `target`**:

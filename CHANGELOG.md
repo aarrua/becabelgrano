@@ -79,10 +79,37 @@ y este proyecto adhiere a [Conventional Commits](https://www.conventionalcommits
 - **Suite de Pruebas Automatizadas (35 tests backend exitosos)**:
   - 12 pruebas unitarias e integración en `BridgeActuatorGatewayTest`: comando exitoso (200), rechazo por interlock (409), rechazo de encendido por telemetría desactualizada (409 `telemetry_stale`), apagado permitido con telemetría vieja (200), comando expirado (503), timeout de dispositivo (503), timeout del gateway (503), broker desconectado (503), **test específico de reconexión tras caída del broker con recepción de acks**, telemetría fresca, telemetría obsoleta ($>5$ s $\to$ `null`) y target inválido (404).
 
+### Added - Fase 4: Puesta en Marcha Integral (Etapa 4 - Verificación Integral E2E en Producción)
+- **Verificación Integral de Punta a Punta**:
+  - Ejecución y validación manual E2E de la arquitectura completa en perfil `prod` mediante 5 terminales concurrentes (Docker Compose, Bridge Edge, Backend Spring Boot, monitor Mosquitto Sub, y cliente REST/PowerShell).
+  - Verificado el flujo exitoso de comando de encendido y apagado de bomba con confirmación por MQTT QoS 1 y respuesta HTTP 200 OK.
+  - Verificado el disparo del interlock de seguridad de sobrellenado con respuesta HTTP 409 Conflict (`reason: "overflow_a"` / `"overflow_b"`).
+  - Verificada la resiliencia y timeout ante bridge detenido con HTTP 503 Service Unavailable (`reason: "bridge_unavailable"`).
+  - Verificada la resiliencia ante caída y reinicio del broker Mosquitto: reconexión automática transparente del backend y bridge sin reiniciar Spring Boot.
+  - Verificada la segregación de seguridad por roles: usuario con rol `ALUMNO` recibe HTTP 403 Forbidden al intentar accionar actuadores.
+  - Verificada la persistencia de eventos en la tabla de auditoría de H2 con mapeo correcto del campo `target` y motivos de rechazo.
+  - Verificado el frontend SPA servido desde Nginx en `http://localhost/` consumiendo datos de telemetría y renderizando paneles de Grafana por iframe.
+
+### Added - Fase 4: Puesta en Marcha Integral (Etapa 5 - Pulido, Resiliencia y Documentación Operativa)
+- **Ajuste de Precisión Numérica en Dashboards de Grafana**:
+  - Configurado `decimals = 1` en los gauges de nivel de Tanque A y Tanque B en `infra/grafana/provisioning/dashboards/json/tanques.json` (eliminando representación `0.100%` en favor de `0.1%`).
+  - Configurado `decimals = 1` en el panel de series temporales de nivel histórico, `decimals = 2` en caudal de bomba (`L/min`) y `decimals = 1` en sensores de temperatura (`°C`).
+- **Robustez de `InfluxTelemetryProvider` y Prevención de Fugas de Stack Trace**:
+  - Captura y aislamiento de `InfluxException` y `UnauthorizedException` en `InfluxTelemetryProvider`: ante InfluxDB inaccesible, token inválido o ausencia de registros, retorna una trama de telemetría degradada con modo `"offline"`, indicador `sensor_fault: true`, estado de bomba desconocido (`"pump": null`) y `isTelemetryFresh() = false` sin propagar un error 500 no controlado.
+  - Eliminada recursión mutua entre `getLatestTelemetry()` e `isTelemetryFresh()` calculando la frescura localmente a partir del timestamp del registro más reciente.
+  - Incorporado manejador `@ExceptionHandler(InfluxException.class)` en `GlobalExceptionHandler` retornando HTTP 503 Service Unavailable (`reason: "telemetry_unavailable"`).
+  - Incorporado `@ExceptionHandler(Throwable.class)` de respaldo en `GlobalExceptionHandler` para capturar cualquier error inesperado del servidor y devolver HTTP 500 con formato estructurado sin exponer stack traces a clientes externos.
+  - Incorporadas pruebas unitarias completas en `InfluxTelemetryProviderTest` validando Influx caído, token no autorizado y resultado vacío.
+- **Calibración de Interlocks y Documentación Operativa E2E**:
+  - Confirmado umbral de seguridad de sobrellenado (85.0 %) configurable de manera desacoplada en `edge/config.yaml` y `backend/src/main/resources/application.yml`.
+  - Documentada en `AGENTS.md` la nota sobre la inercia gravitatoria de descarga Tanque A $\to$ Tanque B (pico acumulado en B de hasta ~97 % en simulaciones con bomba apagada a tiempo) y la necesidad de calibración física y evaluación de corte preventivo por volumen total combinado ($V_A + V_B$).
+  - Creada guía integral de verificación operativa en `docs/05-verificacion-e2e.md` detallando la puesta en marcha con 5 terminales, formatos reales de respuesta de API (`ActuatorCommandResponse` y `AuditEntryResponse`), uso de marcadores `<TU_CLAVE_...>` sin secretos reales, y notas de experiencia (variables de sesión `$env:`, resembrado de H2 borrando `backend/data`, sincronización de contraseñas de Mosquitto y comillas en perfiles de PowerShell 5.1).
+- **Higiene del Repositorio y Auditoría de Secretos**:
+  - Agregadas exclusiones a `.gitignore` para notas y scripts temporales de prueba (`ayuda.md`, `probar-e2e.ps1`, `*.local.md`).
+  - Verificada la ausencia total de secretos reales en archivos versionados mediante auditoría con `git grep`.
+
 ### Planned (Fase 4 - Próximas Etapas)
-- **Etapa 4**: Verificación integral en producción (Docker Compose + Bridge/Simulador + Backend prod + Frontend vía Nginx).
-- **Etapa 5**: Pendientes menores (decimales en gauges de Grafana, nota de calibración de interlock con hardware).
-- **Etapa 6**: Firmware definitivo para Arduino Uno (`firmware/tanques/tanques.ino` sin ArduinoJson, diagram.json de Wokwi, verificación de memoria RAM < 75%).
+- **Etapa 6**: Firmware definitivo para Arduino Uno (`firmware/tanques/tanques.ino` con emisión periódica de telemetría en contrato JSON v1, recepción de comandos seriales, descarte seguro de ruidos, e interlocks físicos de última barrera).
 
 ---
 

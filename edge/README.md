@@ -172,7 +172,7 @@ Crear el archivo `/home/pi/becabelgrano/edge/.env` con permisos restringidos (`c
 ```bash
 cat << 'EOF' > /home/pi/becabelgrano/edge/.env
 INFLUX_URL=http://<IP_SERVIDOR_DOCKER>:8086
-INFLUX_TOKEN=tanques-super-secret-token-2025
+INFLUX_TOKEN=<TU_TOKEN_INFLUX>
 INFLUX_ORG=utn-frsf
 INFLUX_BUCKET=tanques
 MQTT_HOST=<IP_SERVIDOR_DOCKER>
