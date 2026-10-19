@@ -378,3 +378,27 @@ def test_influx_writer_raises_when_token_empty() -> None:
         InfluxWriter(url="http://localhost:8086", token="", org="utn-frsf", bucket="tanques")
 
 
+def test_format_influx_line_with_null_sensors() -> None:
+    """13. Tramas con valores nulos (MODO_SIM_SIN_SENSORES o sensor_fault) se formatean correctamente."""
+    trama = {
+        "v": 1,
+        "seq": 42,
+        "uptime_ms": 12000,
+        "tank_a": {"weight_g": None, "level_pct": None, "temp_c": None},
+        "tank_b": {"weight_g": None, "level_pct": None, "temp_c": None},
+        "flow_lpm": None,
+        "actuators": {"pump": True},
+        "alarms": {"overflow_a": False, "overflow_b": False, "sensor_fault": True},
+        "mode": "auto"
+    }
+    line = format_influx_line(trama)
+    assert line is not None
+    assert line.startswith("telemetry,mode=auto")
+    assert "seq=42i" in line
+    assert "uptime_ms=12000i" in line
+    assert "pump=true" in line
+    assert "sensor_fault=true" in line
+    assert "tank_a_weight_g" not in line
+
+
+

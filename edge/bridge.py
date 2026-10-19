@@ -132,25 +132,35 @@ def format_influx_line(data: Dict[str, Any], timestamp_ns: Optional[int] = None)
 
         tank_a = data["tank_a"]
         tank_b = data["tank_b"]
-        flow_lpm = float(data.get("flow_lpm", 0.0))
         actuators = data.get("actuators", {})
         alarms = data.get("alarms", {})
 
         fields = [
             f"seq={seq}i",
             f"uptime_ms={uptime_ms}i",
-            f"tank_a_weight_g={float(tank_a['weight_g']):.2f}",
-            f"tank_a_level_pct={float(tank_a['level_pct']):.2f}",
-            f"tank_a_temp_c={float(tank_a['temp_c']):.2f}",
-            f"tank_b_weight_g={float(tank_b['weight_g']):.2f}",
-            f"tank_b_level_pct={float(tank_b['level_pct']):.2f}",
-            f"tank_b_temp_c={float(tank_b['temp_c']):.2f}",
-            f"flow_lpm={flow_lpm:.2f}",
-            f"pump={'true' if actuators.get('pump', False) else 'false'}",
-            f"overflow_a={'true' if alarms.get('overflow_a', False) else 'false'}",
-            f"overflow_b={'true' if alarms.get('overflow_b', False) else 'false'}",
-            f"sensor_fault={'true' if alarms.get('sensor_fault', False) else 'false'}",
         ]
+
+        if tank_a.get("weight_g") is not None:
+            fields.append(f"tank_a_weight_g={float(tank_a['weight_g']):.2f}")
+        if tank_a.get("level_pct") is not None:
+            fields.append(f"tank_a_level_pct={float(tank_a['level_pct']):.2f}")
+        if tank_a.get("temp_c") is not None:
+            fields.append(f"tank_a_temp_c={float(tank_a['temp_c']):.2f}")
+
+        if tank_b.get("weight_g") is not None:
+            fields.append(f"tank_b_weight_g={float(tank_b['weight_g']):.2f}")
+        if tank_b.get("level_pct") is not None:
+            fields.append(f"tank_b_level_pct={float(tank_b['level_pct']):.2f}")
+        if tank_b.get("temp_c") is not None:
+            fields.append(f"tank_b_temp_c={float(tank_b['temp_c']):.2f}")
+
+        if data.get("flow_lpm") is not None:
+            fields.append(f"flow_lpm={float(data['flow_lpm']):.2f}")
+
+        fields.append(f"pump={'true' if actuators.get('pump', False) else 'false'}")
+        fields.append(f"overflow_a={'true' if alarms.get('overflow_a', False) else 'false'}")
+        fields.append(f"overflow_b={'true' if alarms.get('overflow_b', False) else 'false'}")
+        fields.append(f"sensor_fault={'true' if alarms.get('sensor_fault', False) else 'false'}")
 
         if timestamp_ns is not None:
             line = f"telemetry,mode={mode} {','.join(fields)} {timestamp_ns}"
