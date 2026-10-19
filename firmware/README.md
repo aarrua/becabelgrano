@@ -2,7 +2,31 @@
 
 Este directorio contiene la especificación y el código fuente del firmware para el microcontrolador Arduino Uno (ATmega328P) del kit didáctico.
 
-> **Estado actual**: Especificación de contrato y requerimientos para el desarrollo de hardware/firmware. La fase inicial del proyecto utiliza un simulador software (`edge/simulator.py`) que respeta rigurosamente este contrato.
+> **Estado actual**: Firmware implementado en `firmware/tanques/` para Arduino Uno (ATmega328P). Implementación modular sin memoria dinámica (`malloc`), sin la clase `String` y sin `ArduinoJson` para máxima estabilidad y bajo consumo de RAM (< 20%) y Flash (< 15%).
+
+---
+
+## 1. Estructura del Código Fuente (`firmware/tanques/`)
+
+- **`tanques.ino`**: Sketch principal, orquestación del ciclo no bloqueante `setup()` y `loop()` con `millis()`.
+- **`config.h`**: Definición de pines (HX711, DS18B20, caudalímetro D2, relé D9, NeoPixels D10/D11), baudrate (115200) y configuración de simulación (`MODO_SIM_SIN_SENSORES`).
+- **`actuadores.h` / `actuadores.cpp`**: Control del relé de la bomba y LED de diagnóstico (pin 13). Apagado garantizado como primera instrucción en `setup()`.
+- **`sensores.h` / `sensores.cpp`**: Adquisición de variables físicas e interlocks locales.
+- **`protocolo.h` / `protocolo.cpp`**: Parser serial de comandos entrantes con buffer fijo de descarte seguro y formateador de telemetría periódica JSON v1 en Flash.
+
+---
+
+## 2. Compilación y Carga con Arduino CLI
+
+Para compilar el sketch para Arduino Uno:
+```powershell
+& "C:\Program Files\Arduino IDE\resources\app\lib\backend\resources\arduino-cli.exe" compile --fqbn arduino:avr:uno firmware/tanques
+```
+
+Para subir el firmware al Arduino Uno (por ejemplo en el puerto `COM5`):
+```powershell
+& "C:\Program Files\Arduino IDE\resources\app\lib\backend\resources\arduino-cli.exe" upload -p COM5 --fqbn arduino:avr:uno firmware/tanques
+```
 
 ---
 

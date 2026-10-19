@@ -170,8 +170,9 @@ npm run dev
 │   ├── 01-contrato-datos.md   # Especificación de telemetría y tramas seriales
 │   ├── 02-flujo-comandos.md   # Diagramas de secuencia y mecanismos de seguridad
 │   ├── 03-api.md              # Documentación de endpoints REST y OpenAPI
+│   ├── 04-hardware.md         # Especificación de hardware y mapa de pines Arduino Uno
 │   └── 05-verificacion-e2e.md # Guía paso a paso de verificación integral E2E en producción
-├── firmware/        # Especificación y código para Arduino Uno
+├── firmware/        # Código fuente para Arduino Uno (firmware/tanques/)
 ├── edge/            # Scripts Python para Raspberry Pi (simulador físico y bridge serial)
 ├── backend/         # Backend REST en Spring Boot 3.5.x (Java 21, Maven, JWT, H2)
 ├── infra/           # Orquestación con Docker Compose (InfluxDB, Grafana, nginx)

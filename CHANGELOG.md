@@ -108,8 +108,24 @@ y este proyecto adhiere a [Conventional Commits](https://www.conventionalcommits
   - Agregadas exclusiones a `.gitignore` para notas y scripts temporales de prueba (`ayuda.md`, `probar-e2e.ps1`, `*.local.md`).
   - Verificada la ausencia total de secretos reales en archivos versionados mediante auditoría con `git grep`.
 
+### Added - Fase 4: Puesta en Marcha Integral (Etapa 6 - Firmware Arduino Uno - Sub-etapa 6.1)
+- **Esqueleto Modular de Firmware (`firmware/tanques/`)**:
+  - Implementada arquitectura modular en C/C++ dividida en `tanques.ino`, `config.h`, `actuadores`, `sensores` y `protocolo` para ATmega328P (16 MHz, 5 V).
+  - Cumplimiento estricto de restricción de memoria: sin uso de heap (`malloc`/`free`), sin la clase `String` y sin `ArduinoJson`. Consumo ultra bajo medido por `arduino-cli`: **Flash: 3796 bytes (11%)** sobre 32 KB; **RAM: 355 bytes (17%)** sobre 2 KB.
+  - Modo `#define MODO_SIM_SIN_SENSORES 1` en `config.h` para pruebas completas en banco con la placa Arduino Uno sin sensores periféricos conectados: emite telemetría periódica a 1 Hz con valores nulos (`null`) y bandera `sensor_fault: true`, duplicando el accionamiento de la bomba en el LED integrado del pin 13 (`LED_BUILTIN`).
+  - Seguridad en Relé de Bomba (pin `D9`): garantizado estado **APAGADO** como primerísima instrucción en `setup()`, con lógica de conmutación configurable mediante `#define RELE_ACTIVO_ALTO` (1 o 0).
+  - Parser serie en buffer estático (`SERIAL_RX_BUFFER_SIZE = 96`) con descarte seguro de tramas demasiado largas ante desbordes. Parseo sin librerías de comandos `{"id":"...","cmd":"set","target":"pump","value":true|false}` respondiendo con `{"ack":"<id>","ok":true}` o rechazo semántico (`"unknown_cmd"`, `"malformed_cmd"`).
+- **Adaptación y Robustez en Borde (`edge/bridge.py`)**:
+  - Modificado `format_influx_line` para tolerar campos de sensores nulos (`None`) en tramas JSON seriales (emitidas en `MODO_SIM_SIN_SENSORES` o ante `sensor_fault`) e insertar correctamente la línea en InfluxDB Line Protocol sin provocar excepciones `TypeError`.
+  - Incorporada prueba unitaria `test_format_influx_line_with_null_sensors` en `edge/tests/test_bridge.py`.
+- **Documentación de Hardware y Cableado (`docs/04-hardware.md`)**:
+  - Creada especificación técnica completa con mapa de pines (`D0`-`D1` UART, `D2` Caudalímetro INT0, `D4`-`D7` HX711, `D8` OneWire, `D9` Relé, `D10`-`D11` NeoPixels, `D13` LED Diagnóstico).
+  - Documentadas reglas de topología de alimentación: obligatoriedad de fuente externa de 5 V con GND común para cargas inductivas y tiras LED, capacitor de 1000 µF y resistencias de 330 Ω en líneas de datos NeoPixel.
+
 ### Planned (Fase 4 - Próximas Etapas)
-- **Etapa 6**: Firmware definitivo para Arduino Uno (`firmware/tanques/tanques.ino` con emisión periódica de telemetría en contrato JSON v1, recepción de comandos seriales, descarte seguro de ruidos, e interlocks físicos de última barrera).
+- **Etapa 6 (Sub-etapa 6.2)**: Integración de sensores reales (OneWire/DallasTemperature DS18B20 sin bloqueo en loop, HX711 x2 con celdas de 10 kg, caudalímetro por interrupciones en D2 e interlock definitivo en firmware).
+- **Etapa 6 (Sub-etapa 6.3)**: Tiras NeoPixel (barra de nivel, color por temperatura y parpadeo en alarma).
+- **Etapa 6 (Sub-etapa 6.4)**: Simulación en Wokwi (`diagram.json`, `wokwi.toml`) y cierre documental.
 
 ---
 

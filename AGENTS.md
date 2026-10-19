@@ -182,7 +182,8 @@ Al completar cada fase:
      - Pulido de visualización, resiliencia y documentación operativa sin secretos en `docs/05-verificacion-e2e.md` (Etapa 5).
      - Pendiente: Firmware en Arduino Uno (Etapa 6).
 4. **Firmware definitivo del Arduino Uno**:
-   Implementación en C/C++ (Arduino) con emisión periódica de telemetría respetando el contrato JSON v1, recepción e interpretación de comandos seriales y los interlocks de seguridad definitivos de última barrera en el microcontrolador.
+   - **Completado en Fase 4 (Sub-etapa 6.1)**: Esqueleto modular en `firmware/tanques/`, modo `MODO_SIM_SIN_SENSORES`, relé forzado a apagado en arranque, parser de comandos seriales sin `String` ni `ArduinoJson`, y emisión de telemetría periódica JSON v1 (consumo: 11% Flash, 17% RAM).
+   - Pendientes: Sub-etapas 6.2 (sensores reales e interlocks en firmware), 6.3 (NeoPixel) y 6.4 (Wokwi y cierre).
 5. **Calibrar el umbral del interlock (85 %) con el hardware físico real**:
    La apertura manual de la llave de interconexión Tanque A $\to$ Tanque B altera la tasa de descarga por gravedad y la altura máxima acumulada en B (llegó a ~97 % en simulaciones con vaciado en tránsito). En la puesta en marcha con hardware se debe calibrar el umbral y considerar un interlock de corte por volumen total combinado ($V_A + V_B$).
 6. **Formato de Gauges en Grafana**:
