@@ -160,6 +160,13 @@ y este proyecto adhiere a [Conventional Commits](https://www.conventionalcommits
   - **Flash (Programa)**: **14678 bytes (45%)** sobre 32256 bytes (límite estricto < 80%).
   - **RAM (Variables Globales)**: **661 bytes (32%)** sobre 2048 bytes (límite estricto < 75%).
 
+### Changed - Fase 4: Condiciones de Aprobación de la Sub-etapa 6.2
+- **Watchdog de bomba sin keep-alive**: se adopta el reencendido manual por el docente y el watchdog de 60 s del firmware queda como tope duro. El keep-alive automático del backend (cada 30 s, tope de 5 min, cortes por interlock, `telemetry_stale` y bridge caído, reenvíos auditados) queda documentado como mejora futura a evaluar tras calibrar el kit real (`docs/02-flujo-comandos.md`, sección 3).
+- **Umbral de overflow en ambos tanques**: aclarado que el 85 % aplica a cualquiera de los dos tanques (`overflow_a` u `overflow_b`) en `AGENTS.md` y `edge/config.yaml`; corregidas en `docs/02-flujo-comandos.md` las referencias obsoletas al 95 %.
+- **Comandos de calibración a través del bridge**: verificado y cubierto con tests (`edge/tests/test_bridge.py`) que `tare`, `cal_scale`, `reset_cal` y `save_cal` se reenvían al serial siempre que lleven `id` único; sin `id` el bridge los descarta. Procedimiento con el sistema armado (MQTT) en `firmware/GUIA_PRUEBAS_HARDWARE.md`.
+- **Calibración obligatoria antes de conectar la bomba** (`firmware/GUIA_PRUEBAS_HARDWARE.md`, sección 1.1): celdas (tara y escala con peso conocido), capacidad máxima y caudalímetro, con lista de verificación. Documentado que la capacidad máxima y el factor K no tienen comando serie y que una calibración válida en EEPROM pisa los defaults nuevos tras re-flashear.
+- **`MODO_SIM_SIN_SENSORES`**: `firmware/README.md` explica cómo activarlo para probar el Uno solo y que con `0` el encendido se rechaza por `sensor_fault`.
+
 ### Planned (Fase 4 - Próximas Etapas)
 - **Etapa 6 (Sub-etapa 6.3)**: Tiras NeoPixel (barra de nivel dinámico, gradiente térmico por temperatura y parpadeo intermitente en condición de alarma).
 - **Etapa 6 (Sub-etapa 6.4)**: Simulación en Wokwi (`diagram.json`, `wokwi.toml`) y cierre documental.
