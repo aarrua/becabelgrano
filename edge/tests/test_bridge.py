@@ -458,9 +458,12 @@ def test_process_device_line_with_null_sensors_logging(caplog: pytest.LogCapture
     {"id": "cal-scale-a", "cmd": "cal_scale", "tank": "a", "scale": 415.8},
     {"id": "cal-reset", "cmd": "reset_cal"},
     {"id": "cal-save", "cmd": "save_cal"},
+    {"id": "cal-cap-a", "cmd": "set_capacity", "tank": "a", "grams": 4000.0},
+    {"id": "cal-cap-b", "cmd": "set_capacity", "tank": "b", "grams": 2450.0},
+    {"id": "cal-flow", "cmd": "cal_flow", "pulses_per_l": 450.0},
 ])
 def test_calibration_commands_pass_through_to_serial(bridge: TanquesBridge, cmd: Dict[str, Any]) -> None:
-    """Los comandos de calibracion (tare, cal_scale, reset_cal, save_cal) con id se reenvian tal cual al serial."""
+    """Los comandos de calibracion (tare, cal_scale, set_capacity, cal_flow, reset_cal, save_cal) con id se reenvian tal cual al serial."""
     bridge.handle_incoming_command(json.dumps(cmd))
 
     assert not bridge.command_queue.empty()
@@ -472,3 +475,15 @@ def test_calibration_command_without_id_is_discarded(bridge: TanquesBridge) -> N
     bridge.handle_incoming_command(json.dumps({"cmd": "save_cal"}))
 
     assert bridge.command_queue.empty()
+
+
+def test_calibration_ack_with_firmware_reason_is_published(bridge: TanquesBridge, fake_mqtt: FakeMqttClient) -> None:
+    """El rechazo del firmware por rango invalido (invalid_capacity) llega a tanques/ack con su motivo."""
+    cmd = {"id": "cal-cap-bad", "cmd": "set_capacity", "tank": "a", "grams": 99999}
+    bridge.handle_incoming_command(json.dumps(cmd))
+    assert json.loads(bridge.command_queue.get_nowait()) == cmd
+
+    bridge.process_device_line(json.dumps({"ack": "cal-cap-bad", "ok": False, "reason": "invalid_capacity"}))
+
+    acks = [m for m in fake_mqtt.published_messages if m["topic"] == "tanques/ack"]
+    assert acks[-1]["payload"] == {"ack": "cal-cap-bad", "ok": False, "reason": "invalid_capacity"}
