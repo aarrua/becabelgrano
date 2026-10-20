@@ -12,20 +12,23 @@ interface TankProps {
 
 function TankCylinder({ name, subtitle, telemetry, isOverflow, isAlarmActive }: TankProps) {
   const level = Math.max(0, Math.min(100, telemetry.level_pct ?? 0))
+  // Sin nivel válido no se puede afirmar sobrellenado: se muestra "Sin dato" con estilo de alerta
+  const noData = telemetry.level_pct == null
   const isHigh = isOverflow || isAlarmActive
+  const showAlert = isHigh || noData
 
   return (
-    <div className={`tank-card ${isHigh ? 'tank-warning' : ''}`}>
+    <div className={`tank-card ${showAlert ? 'tank-warning' : ''}`}>
       <div className="tank-card-header">
         <div>
           <h3 className="tank-name">{name}</h3>
           <span className="tank-subtitle">{subtitle}</span>
         </div>
-        <div className={`tank-status-pill ${isHigh ? 'pill-alert' : 'pill-ok'}`}>
-          {isHigh ? (
+        <div className={`tank-status-pill ${showAlert ? 'pill-alert' : 'pill-ok'}`}>
+          {showAlert ? (
             <>
               <AlertTriangleIcon width="14" height="14" />
-              <span>{isOverflow ? 'Sobrellenado' : 'Alarma'}</span>
+              <span>{noData ? 'Sin dato' : isOverflow ? 'Sobrellenado' : 'Alarma'}</span>
             </>
           ) : (
             <>
