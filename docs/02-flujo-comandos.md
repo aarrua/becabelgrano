@@ -14,7 +14,7 @@ El sistema implementa **cuatro capas de defensa en profundidad**:
 1. **Capa 1 (Frontend)**: La interfaz gráfica adapta sus controles dinámicamente según el rol reportado por el token JWT. Los usuarios con rol `ALUMNO` tienen una vista exclusivamente de monitoreo; el panel de control de actuadores no se renderiza.
 2. **Capa 2 (Control de Acceso en Backend)**: Los endpoints de mutación (`POST /api/actuators/{name}`) están custodiados por anotaciones `@PreAuthorize("hasRole('DOCENTE')")`. Cualquier solicitud de un usuario no docente es rechazada de inmediato con `403 Forbidden`.
 3. **Capa 3 (Validación en ActuatorGateway)**: El backend valida que el comando cumpla con las reglas del dominio y con el estado de seguridad antes de despacharlo hacia el bridge.
-4. **Capa 4 (Interlock en Hardware / Firmware)**: El Arduino Uno (y el simulador) contiene la lógica de corte duro autónomo. Si el nivel en cualquiera de los tanques supera el 95% (`overflow_a` u `overflow_b`), la bomba se detiene automáticamente por hardware y cualquier intento de encendido es rechazado con código de fallo específico (`reason: "overflow_a"`).
+4. **Capa 4 (Interlock en Hardware / Firmware)**: El Arduino Uno (y el simulador) contiene la lógica de corte duro autónomo. Si el nivel en cualquiera de los tanques alcanza el 85% (`overflow_threshold_pct`, `overflow_a` u `overflow_b`), la bomba se detiene automáticamente por hardware y cualquier intento de encendido es rechazado con código de fallo específico (`reason: "overflow_a"`).
 
 ---
 
@@ -47,7 +47,7 @@ sequenceDiagram
         Spring->>Gateway: executeCommand("pump", true)
         Gateway->>Bridge: JSON {"id": "c101", "cmd": "set", "target": "pump", "value": true}
         Bridge->>Arduino: Serial JSON {"id":"c101","cmd":"set","target":"pump","value":true}\n
-        Arduino->>Arduino: Verifica nivel tanques (< 95%)<br/>Acciona relé bomba (ON)
+        Arduino->>Arduino: Verifica nivel tanques A y B (< 85%)<br/>Acciona relé bomba (ON)
         Arduino-->>Bridge: Serial JSON {"ack":"c101","ok":true}\n
         Bridge-->>Gateway: AckCommand { ack: "c101", ok: true }
         Gateway-->>Spring: CommandResult (SUCCESS)
@@ -61,7 +61,7 @@ sequenceDiagram
     %% CASO 2: RECHAZO POR INTERLOCK (SEGURIDAD FÍSICA)
     %% ========================================================
     rect rgb(255, 238, 238)
-        note over Docente, Arduino: CASO 2: Rechazo Seguro por Interlock (Nivel Tanque A > 95%)
+        note over Docente, Arduino: CASO 2: Rechazo Seguro por Interlock (Nivel Tanque A >= 85%)
         Docente->>Front: Click "Encender Bomba"
         Front->>Nginx: POST /api/actuators/pump { "value": true }<br/>[Header: Authorization Bearer JWT_DOCENTE]
         Nginx->>Spring: Proxy /api/actuators/pump
@@ -69,7 +69,7 @@ sequenceDiagram
         Spring->>Gateway: executeCommand("pump", true)
         Gateway->>Bridge: JSON {"id": "c102", "cmd": "set", "target": "pump", "value": true}
         Bridge->>Arduino: Serial JSON {"id":"c102","cmd":"set","target":"pump","value":true}\n
-        Arduino->>Arduino: EVALUACIÓN INTERLOCK: Nivel A = 96.2% (> 95%)<br/>¡Bomba se mantiene apagada!
+        Arduino->>Arduino: EVALUACIÓN INTERLOCK: Nivel A = 86.2% (>= 85%)<br/>¡Bomba se mantiene apagada!
         Arduino-->>Bridge: Serial JSON {"ack":"c102","ok":false,"reason":"overflow_a"}\n
         Bridge-->>Gateway: AckCommand { ack: "c102", ok: false, reason: "overflow_a" }
         Gateway-->>Spring: Lanza InterlockViolationException("overflow_a")
