@@ -161,6 +161,7 @@ def format_influx_line(data: Dict[str, Any], timestamp_ns: Optional[int] = None)
         fields.append(f"overflow_a={'true' if alarms.get('overflow_a', False) else 'false'}")
         fields.append(f"overflow_b={'true' if alarms.get('overflow_b', False) else 'false'}")
         fields.append(f"sensor_fault={'true' if alarms.get('sensor_fault', False) else 'false'}")
+        fields.append(f"pump_timeout={'true' if alarms.get('pump_timeout', False) else 'false'}")
 
         if timestamp_ns is not None:
             line = f"telemetry,mode={mode} {','.join(fields)} {timestamp_ns}"

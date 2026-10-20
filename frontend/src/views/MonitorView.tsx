@@ -51,7 +51,9 @@ export function MonitorView() {
   const isStale = !isDisconnected && (ageMs > 5000 || telemetry?.actuators?.['pump'] === null)
 
   const alarms = telemetry?.alarms ?? {}
-  const hasAlarms = Boolean(alarms['overflow_a'] || alarms['overflow_b'] || alarms['sensor_fault'])
+  const hasAlarms = Boolean(
+    alarms['overflow_a'] || alarms['overflow_b'] || alarms['sensor_fault'] || alarms['pump_timeout']
+  )
   const pumpState = telemetry?.actuators?.['pump'] ?? null
   
   const tankALevel = telemetry?.tank_a?.level_pct ?? 0
@@ -107,6 +109,8 @@ export function MonitorView() {
               <span>
                 {alarms['sensor_fault']
                   ? 'Fallo de Sensores'
+                  : alarms['pump_timeout']
+                  ? 'Bomba Apagada por Watchdog (60 s)'
                   : alarms['overflow_a'] || alarms['overflow_b']
                   ? 'Interlock de Sobrellenado Activo'
                   : 'Alarma Activa'}
@@ -128,6 +132,16 @@ export function MonitorView() {
           <div>
             <strong>Alerta de Hardware:</strong> Se detectó falla o desconexión en los sensores de nivel.
             El control automático y manual se encuentra bloqueado por seguridad.
+          </div>
+        </div>
+      )}
+
+      {/* Alerta visible si hubo corte por timeout de bomba */}
+      {alarms['pump_timeout'] && (
+        <div className="alert-sensor-fault">
+          <AlertTriangleIcon width="20" height="20" />
+          <div>
+            <strong>Watchdog de Seguridad de Bomba:</strong> La bomba de impulsión fue apagada automáticamente tras alcanzar el tiempo máximo de encendido continuo (60 segundos). Puede reactivarse con un nuevo comando cuando sea seguro.
           </div>
         </div>
       )}

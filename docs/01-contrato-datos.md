@@ -55,7 +55,8 @@ La telemetría se emite a una tasa nominal de **1 Hz (1 trama por segundo)**.
   "alarms": {
     "overflow_a": false,
     "overflow_b": false,
-    "sensor_fault": false
+    "sensor_fault": false,
+    "pump_timeout": false
   },
   "mode": "auto"
 }
@@ -83,6 +84,7 @@ La telemetría se emite a una tasa nominal de **1 Hz (1 trama por segundo)**.
 | `alarms.overflow_a` | Boolean | - | `true` \| `false` | Alarma de sobrellenado en Tanque A ($> 95\%$). Provoca corte de bomba. |
 | `alarms.overflow_b` | Boolean | - | `true` \| `false` | Alarma de sobrellenado en Tanque B ($> 95\%$). Provoca corte de bomba. |
 | `alarms.sensor_fault`| Boolean | - | `true` \| `false` | Fallo de lectura o desconexión física de alguno de los sensores. |
+| `alarms.pump_timeout`| Boolean | - | `true` \| `false` | Corte preventivo de bomba por tiempo continuo máximo superado (watchdog 60 s). |
 | `mode` | String | - | `"auto"` \| `"manual"` | Modo de operación actual reportado por la lógica de control. |
 
 ---

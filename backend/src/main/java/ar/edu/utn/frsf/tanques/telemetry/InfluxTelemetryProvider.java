@@ -169,6 +169,7 @@ public class InfluxTelemetryProvider implements TelemetryProvider {
         alarms.put("overflow_a", parseBoolean(fields.get("overflow_a")));
         alarms.put("overflow_b", parseBoolean(fields.get("overflow_b")));
         alarms.put("sensor_fault", !hasRecords || parseBoolean(fields.get("sensor_fault")));
+        alarms.put("pump_timeout", parseBoolean(fields.get("pump_timeout")));
 
         return new TelemetryFrame(1, seq, uptimeMs, tankA, tankB, flowLpm, actuators, alarms, mode);
     }
