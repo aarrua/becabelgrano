@@ -452,3 +452,23 @@ def test_process_device_line_with_null_sensors_logging(caplog: pytest.LogCapture
 
 
 
+
+@pytest.mark.parametrize("cmd", [
+    {"id": "cal-tare-a", "cmd": "tare", "tank": "a"},
+    {"id": "cal-scale-a", "cmd": "cal_scale", "tank": "a", "scale": 415.8},
+    {"id": "cal-reset", "cmd": "reset_cal"},
+    {"id": "cal-save", "cmd": "save_cal"},
+])
+def test_calibration_commands_pass_through_to_serial(bridge: TanquesBridge, cmd: Dict[str, Any]) -> None:
+    """Los comandos de calibracion (tare, cal_scale, reset_cal, save_cal) con id se reenvian tal cual al serial."""
+    bridge.handle_incoming_command(json.dumps(cmd))
+
+    assert not bridge.command_queue.empty()
+    assert json.loads(bridge.command_queue.get_nowait()) == cmd
+
+
+def test_calibration_command_without_id_is_discarded(bridge: TanquesBridge) -> None:
+    """Un comando de calibracion sin id se descarta y no llega al serial."""
+    bridge.handle_incoming_command(json.dumps({"cmd": "save_cal"}))
+
+    assert bridge.command_queue.empty()
