@@ -253,7 +253,7 @@ static bool extract_json_float(const char *json, const char *key, float &out_val
 }
 
 static void procesar_comando_linea(const char *line) {
-    char cmd_id[20];
+    char cmd_id[37]; // hasta 36 caracteres (UUID con guiones) + NUL
     char cmd_name[16];
 
     bool has_id = extract_json_string(line, "id", cmd_id, sizeof(cmd_id));

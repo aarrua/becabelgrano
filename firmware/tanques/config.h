@@ -108,7 +108,7 @@
 // Parámetros de Comunicación Serial y Temporización
 // ==============================================================================
 #define SERIAL_BAUDRATE           115200
-#define PROTOCOL_RX_BUFFER_SIZE   96
+#define PROTOCOL_RX_BUFFER_SIZE   128 // id de 36 + campo "ts" del bridge entran con margen
 #define TELEMETRY_INTERVAL_MS     1000
 
 // ==============================================================================
