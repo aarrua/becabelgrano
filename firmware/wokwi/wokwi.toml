@@ -1,0 +1,6 @@
+[wokwi]
+version = 1
+# Generar antes con (desde la raíz del repo):
+#   arduino-cli compile --fqbn arduino:avr:uno firmware/tanques --output-dir firmware/wokwi/build
+firmware = 'build/tanques.ino.hex'
+elf = 'build/tanques.ino.elf'

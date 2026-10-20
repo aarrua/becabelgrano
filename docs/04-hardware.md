@@ -64,3 +64,44 @@ Para facilitar el desarrollo, integración y verificación en banco sin necesida
 - La macro `#define MODO_SIM_SIN_SENSORES 1` en `firmware/tanques/config.h` permite operar el firmware con la placa Arduino Uno conectada únicamente por su cable USB a la computadora.
 - Se emite una trama por segundo con `sensor_fault = true` y valores nulos (`null`).
 - El LED integrado (`D13`) se enciende y apaga sincronizado con los comandos seriales `{"id":"...","cmd":"set","target":"pump","value":true|false}`.
+
+---
+
+## 5. Indicadores NeoPixel (Sub-etapa 6.3)
+
+Cada tanque tiene una tira WS2812B de `NEOPIXEL_LEDS_POR_TIRA` LEDs (8 por defecto): `D10` para el Tanque A y `D11` para el Tanque B. Implementación en `firmware/tanques/indicadores.cpp`; constantes en `config.h`.
+
+### 5.1 Comportamiento
+
+| Elemento | Regla |
+| :--- | :--- |
+| Barra de nivel | LEDs encendidos = `level_pct / 100 × LEDs`, redondeado. Sin nivel válido, ninguno. |
+| Color | Por temperatura del tanque: azul `< 22 °C`, verde `< 30 °C`, ámbar `< 40 °C`, rojo `>= 40 °C`; gris tenue si no hay lectura. Es solo monitoreo pasivo. |
+| Alarma | Si hay `overflow` del tanque, `sensor_fault` o `pump_timeout`, el **último LED parpadea en rojo** (`NEOPIXEL_BLINK_MS`) y la barra de nivel se limita a los LEDs restantes. |
+| Brillo | `NEOPIXEL_BRILLO` (20 de 255), constante, para limitar la corriente y el deslumbramiento. |
+| Tiras desconectadas | Sin efecto: el protocolo WS2812B es de solo escritura, no hay detección ni error; el firmware sigue operando normalmente. |
+
+El refresco es no bloqueante: `show()` se llama solo cuando cambia la imagen y a lo sumo para una tira por iteración de `loop()`. `show()` deshabilita interrupciones unos 250 µs por tira; por eso no se refresca mientras haya bytes pendientes en el puerto serie.
+
+### 5.2 Alimentación y cableado (obligatorio)
+
+- **Alimentación externa de 5 V** para el `VCC` de las tiras. No tomar la corriente del pin `5V` del Arduino. Cada LED consume hasta ~60 mA a pleno blanco; con el brillo configurado el consumo real es mucho menor, pero la fuente debe dimensionarse para el peor caso.
+- **GND común**: unir el `GND` de la fuente de 5 V, el `GND` del Arduino y el `GND` de las tiras. Sin masa común la señal de datos no es interpretada.
+- **Resistencia de 330 Ω** en serie entre el pin (`D10` / `D11`) y `DIN` de cada tira, lo más cerca posible de la tira.
+- **Capacitor de 1000 µF (≥ 6,3 V; 16 V recomendado)** entre `+5 V` y `GND`, en el inicio de la tira, para absorber el pico de encendido.
+- Energizar la fuente de las tiras antes o a la vez que el Arduino, o conectar `GND` primero, para no alimentar la tira por la línea de datos.
+
+---
+
+## 6. Simulación en Wokwi (Sub-etapa 6.4)
+
+Archivos en `firmware/wokwi/`: `diagram.json` (Uno, DS18B20 con resistencia pull-up de 4,7 kΩ, relé y NeoPixel) y `wokwi.toml`. Sirve para revisar la lógica de comandos, el relé, la alarma de watchdog y las barras NeoPixel sin hardware. Ver `firmware/wokwi/README.md`.
+
+### 6.1 Qué NO simula Wokwi
+
+- **HX711 con celda de carga real**: no hay modelo del conjunto celda + HX711 equivalente al kit. Sin el HX711 conectado, `is_ready()` es falso y el firmware informa `sensor_fault` con pesos y niveles `null`. Por eso la simulación no valida tara, escala, capacidad ni los interlocks de sobrellenado.
+- **Caudalímetro de efecto Hall**: no se incluye en el diagrama; el pin `D2` queda sin pulsos y `flow_lpm` vale `0.00`. La calibración del factor K requiere el sensor real.
+- **Bomba y circuito hidráulico**: el relé solo conmuta un LED/indicador, no hay dinámica de tanques.
+- **Temporización eléctrica real** (ruido, caída de tensión, corriente de las tiras, pérdida de bytes seriales durante `show()`).
+- **Dirección ROM del DS18B20 real**: el firmware usa direcciones de ejemplo y recurre a la lectura por índice, que es lo que funciona en Wokwi.
+

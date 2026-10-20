@@ -1,0 +1,518 @@
+{
+  "version": 1,
+  "author": "UTN FRSF / GITDA",
+  "editor": "wokwi",
+  "parts": [
+    {
+      "type": "wokwi-arduino-uno",
+      "id": "uno",
+      "top": 0,
+      "left": 0,
+      "attrs": {}
+    },
+    {
+      "type": "wokwi-ds18b20",
+      "id": "temp1",
+      "top": -120,
+      "left": 250,
+      "attrs": {}
+    },
+    {
+      "type": "wokwi-resistor",
+      "id": "r_pullup",
+      "top": -60,
+      "left": 200,
+      "attrs": {
+        "value": "4700"
+      }
+    },
+    {
+      "type": "wokwi-relay-module",
+      "id": "relay1",
+      "top": -110,
+      "left": -190,
+      "attrs": {}
+    },
+    {
+      "type": "wokwi-resistor",
+      "id": "r_din_a",
+      "top": -150,
+      "left": 70,
+      "attrs": {
+        "value": "330"
+      }
+    },
+    {
+      "type": "wokwi-resistor",
+      "id": "r_din_b",
+      "top": -210,
+      "left": 70,
+      "attrs": {
+        "value": "330"
+      }
+    },
+    {
+      "type": "wokwi-neopixel",
+      "id": "npa0",
+      "top": -200,
+      "left": 380,
+      "attrs": {}
+    },
+    {
+      "type": "wokwi-neopixel",
+      "id": "npa1",
+      "top": -200,
+      "left": 420,
+      "attrs": {}
+    },
+    {
+      "type": "wokwi-neopixel",
+      "id": "npa2",
+      "top": -200,
+      "left": 460,
+      "attrs": {}
+    },
+    {
+      "type": "wokwi-neopixel",
+      "id": "npa3",
+      "top": -200,
+      "left": 500,
+      "attrs": {}
+    },
+    {
+      "type": "wokwi-neopixel",
+      "id": "npa4",
+      "top": -200,
+      "left": 540,
+      "attrs": {}
+    },
+    {
+      "type": "wokwi-neopixel",
+      "id": "npa5",
+      "top": -200,
+      "left": 580,
+      "attrs": {}
+    },
+    {
+      "type": "wokwi-neopixel",
+      "id": "npa6",
+      "top": -200,
+      "left": 620,
+      "attrs": {}
+    },
+    {
+      "type": "wokwi-neopixel",
+      "id": "npa7",
+      "top": -200,
+      "left": 660,
+      "attrs": {}
+    },
+    {
+      "type": "wokwi-neopixel",
+      "id": "npb0",
+      "top": -130,
+      "left": 380,
+      "attrs": {}
+    },
+    {
+      "type": "wokwi-neopixel",
+      "id": "npb1",
+      "top": -130,
+      "left": 420,
+      "attrs": {}
+    },
+    {
+      "type": "wokwi-neopixel",
+      "id": "npb2",
+      "top": -130,
+      "left": 460,
+      "attrs": {}
+    },
+    {
+      "type": "wokwi-neopixel",
+      "id": "npb3",
+      "top": -130,
+      "left": 500,
+      "attrs": {}
+    },
+    {
+      "type": "wokwi-neopixel",
+      "id": "npb4",
+      "top": -130,
+      "left": 540,
+      "attrs": {}
+    },
+    {
+      "type": "wokwi-neopixel",
+      "id": "npb5",
+      "top": -130,
+      "left": 580,
+      "attrs": {}
+    },
+    {
+      "type": "wokwi-neopixel",
+      "id": "npb6",
+      "top": -130,
+      "left": 620,
+      "attrs": {}
+    },
+    {
+      "type": "wokwi-neopixel",
+      "id": "npb7",
+      "top": -130,
+      "left": 660,
+      "attrs": {}
+    }
+  ],
+  "connections": [
+    [
+      "uno:5V",
+      "temp1:VCC",
+      "red",
+      []
+    ],
+    [
+      "uno:GND.1",
+      "temp1:GND",
+      "black",
+      []
+    ],
+    [
+      "uno:8",
+      "temp1:DQ",
+      "green",
+      []
+    ],
+    [
+      "uno:8",
+      "r_pullup:1",
+      "green",
+      []
+    ],
+    [
+      "r_pullup:2",
+      "uno:5V",
+      "red",
+      []
+    ],
+    [
+      "uno:5V",
+      "relay1:VCC",
+      "red",
+      []
+    ],
+    [
+      "uno:GND.1",
+      "relay1:GND",
+      "black",
+      []
+    ],
+    [
+      "uno:9",
+      "relay1:IN",
+      "orange",
+      []
+    ],
+    [
+      "uno:10",
+      "r_din_a:1",
+      "blue",
+      []
+    ],
+    [
+      "uno:11",
+      "r_din_b:1",
+      "purple",
+      []
+    ],
+    [
+      "r_din_a:2",
+      "npa0:DIN",
+      "blue",
+      []
+    ],
+    [
+      "npa0:DOUT",
+      "npa1:DIN",
+      "blue",
+      []
+    ],
+    [
+      "npa1:DOUT",
+      "npa2:DIN",
+      "blue",
+      []
+    ],
+    [
+      "npa2:DOUT",
+      "npa3:DIN",
+      "blue",
+      []
+    ],
+    [
+      "npa3:DOUT",
+      "npa4:DIN",
+      "blue",
+      []
+    ],
+    [
+      "npa4:DOUT",
+      "npa5:DIN",
+      "blue",
+      []
+    ],
+    [
+      "npa5:DOUT",
+      "npa6:DIN",
+      "blue",
+      []
+    ],
+    [
+      "npa6:DOUT",
+      "npa7:DIN",
+      "blue",
+      []
+    ],
+    [
+      "npa0:VDD",
+      "uno:5V",
+      "red",
+      []
+    ],
+    [
+      "npa0:VSS",
+      "uno:GND.1",
+      "black",
+      []
+    ],
+    [
+      "npa1:VDD",
+      "uno:5V",
+      "red",
+      []
+    ],
+    [
+      "npa1:VSS",
+      "uno:GND.1",
+      "black",
+      []
+    ],
+    [
+      "npa2:VDD",
+      "uno:5V",
+      "red",
+      []
+    ],
+    [
+      "npa2:VSS",
+      "uno:GND.1",
+      "black",
+      []
+    ],
+    [
+      "npa3:VDD",
+      "uno:5V",
+      "red",
+      []
+    ],
+    [
+      "npa3:VSS",
+      "uno:GND.1",
+      "black",
+      []
+    ],
+    [
+      "npa4:VDD",
+      "uno:5V",
+      "red",
+      []
+    ],
+    [
+      "npa4:VSS",
+      "uno:GND.1",
+      "black",
+      []
+    ],
+    [
+      "npa5:VDD",
+      "uno:5V",
+      "red",
+      []
+    ],
+    [
+      "npa5:VSS",
+      "uno:GND.1",
+      "black",
+      []
+    ],
+    [
+      "npa6:VDD",
+      "uno:5V",
+      "red",
+      []
+    ],
+    [
+      "npa6:VSS",
+      "uno:GND.1",
+      "black",
+      []
+    ],
+    [
+      "npa7:VDD",
+      "uno:5V",
+      "red",
+      []
+    ],
+    [
+      "npa7:VSS",
+      "uno:GND.1",
+      "black",
+      []
+    ],
+    [
+      "r_din_b:2",
+      "npb0:DIN",
+      "blue",
+      []
+    ],
+    [
+      "npb0:DOUT",
+      "npb1:DIN",
+      "blue",
+      []
+    ],
+    [
+      "npb1:DOUT",
+      "npb2:DIN",
+      "blue",
+      []
+    ],
+    [
+      "npb2:DOUT",
+      "npb3:DIN",
+      "blue",
+      []
+    ],
+    [
+      "npb3:DOUT",
+      "npb4:DIN",
+      "blue",
+      []
+    ],
+    [
+      "npb4:DOUT",
+      "npb5:DIN",
+      "blue",
+      []
+    ],
+    [
+      "npb5:DOUT",
+      "npb6:DIN",
+      "blue",
+      []
+    ],
+    [
+      "npb6:DOUT",
+      "npb7:DIN",
+      "blue",
+      []
+    ],
+    [
+      "npb0:VDD",
+      "uno:5V",
+      "red",
+      []
+    ],
+    [
+      "npb0:VSS",
+      "uno:GND.1",
+      "black",
+      []
+    ],
+    [
+      "npb1:VDD",
+      "uno:5V",
+      "red",
+      []
+    ],
+    [
+      "npb1:VSS",
+      "uno:GND.1",
+      "black",
+      []
+    ],
+    [
+      "npb2:VDD",
+      "uno:5V",
+      "red",
+      []
+    ],
+    [
+      "npb2:VSS",
+      "uno:GND.1",
+      "black",
+      []
+    ],
+    [
+      "npb3:VDD",
+      "uno:5V",
+      "red",
+      []
+    ],
+    [
+      "npb3:VSS",
+      "uno:GND.1",
+      "black",
+      []
+    ],
+    [
+      "npb4:VDD",
+      "uno:5V",
+      "red",
+      []
+    ],
+    [
+      "npb4:VSS",
+      "uno:GND.1",
+      "black",
+      []
+    ],
+    [
+      "npb5:VDD",
+      "uno:5V",
+      "red",
+      []
+    ],
+    [
+      "npb5:VSS",
+      "uno:GND.1",
+      "black",
+      []
+    ],
+    [
+      "npb6:VDD",
+      "uno:5V",
+      "red",
+      []
+    ],
+    [
+      "npb6:VSS",
+      "uno:GND.1",
+      "black",
+      []
+    ],
+    [
+      "npb7:VDD",
+      "uno:5V",
+      "red",
+      []
+    ],
+    [
+      "npb7:VSS",
+      "uno:GND.1",
+      "black",
+      []
+    ]
+  ],
+  "dependencies": {}
+}
