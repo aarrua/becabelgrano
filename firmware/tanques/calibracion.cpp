@@ -70,6 +70,29 @@ void calibracion_set_scale_b(float scale) {
     }
 }
 
+// Las comparaciones afirmativas rechazan también NaN (toda comparación con NaN es falsa).
+static bool en_rango(float v, float min_v, float max_v) {
+    return (v >= min_v && v <= max_v);
+}
+
+bool calibracion_set_capacity_a(float gramos) {
+    if (!en_rango(gramos, CAL_CAPACIDAD_MIN_G, CAL_CAPACIDAD_MAX_G)) return false;
+    s_cal.max_weight_a = gramos;
+    return true;
+}
+
+bool calibracion_set_capacity_b(float gramos) {
+    if (!en_rango(gramos, CAL_CAPACIDAD_MIN_G, CAL_CAPACIDAD_MAX_G)) return false;
+    s_cal.max_weight_b = gramos;
+    return true;
+}
+
+bool calibracion_set_flow_k(float pulsos_por_litro) {
+    if (!en_rango(pulsos_por_litro, CAL_FLOW_K_MIN, CAL_FLOW_K_MAX)) return false;
+    s_cal.flow_k_factor = pulsos_por_litro;
+    return true;
+}
+
 bool calibracion_save_eeprom() {
     s_cal.magic = CAL_MAGIC;
     s_cal.version = CAL_VERSION;

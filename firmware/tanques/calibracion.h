@@ -3,6 +3,14 @@
 
 #include <Arduino.h>
 
+// Rangos aceptados por los comandos set_capacity y cal_flow.
+// La capacidad se acota a la de la celda de carga (10 kg); el factor K cubre
+// desde caudalímetros lentos (~100 pulsos/L) hasta YF-S401 (~5880 pulsos/L).
+#define CAL_CAPACIDAD_MIN_G   100.0f
+#define CAL_CAPACIDAD_MAX_G   10000.0f
+#define CAL_FLOW_K_MIN        10.0f
+#define CAL_FLOW_K_MAX        10000.0f
+
 /**
  * Estructura de calibración de sensores físicos.
  * Se almacena en la memoria EEPROM interna del ATmega328P únicamente
@@ -52,6 +60,26 @@ void calibracion_set_scale_a(float scale);
  * Establece el factor de escala (cuentas/g) de la celda B en RAM.
  */
 void calibracion_set_scale_b(float scale);
+
+/**
+ * Establece la capacidad máxima (g) del tanque A en RAM.
+ * @return false (sin modificar nada) si el valor es NaN o está fuera de
+ *         [CAL_CAPACIDAD_MIN_G, CAL_CAPACIDAD_MAX_G].
+ */
+bool calibracion_set_capacity_a(float gramos);
+
+/**
+ * Establece la capacidad máxima (g) del tanque B en RAM.
+ * @return false (sin modificar nada) si el valor es inválido (ver tanque A).
+ */
+bool calibracion_set_capacity_b(float gramos);
+
+/**
+ * Establece el factor K del caudalímetro (pulsos por litro) en RAM.
+ * @return false (sin modificar nada) si el valor es NaN o está fuera de
+ *         [CAL_FLOW_K_MIN, CAL_FLOW_K_MAX].
+ */
+bool calibracion_set_flow_k(float pulsos_por_litro);
 
 /**
  * Restaura los parámetros de calibración a sus valores por defecto en RAM.

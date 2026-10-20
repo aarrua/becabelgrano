@@ -332,6 +332,44 @@ static void procesar_comando_linea(const char *line) {
     }
 
     // =========================================================================
+    // Comando: {"cmd":"set_capacity","tank":"a"|"b","grams":4000}
+    // Fija la capacidad máxima del tanque (100..10000 g) en RAM.
+    // =========================================================================
+    if (strcmp(cmd_name, "set_capacity") == 0) {
+        char tank[8];
+        float grams = 0.0f;
+        if (extract_json_string(line, "tank", tank, sizeof(tank)) &&
+            extract_json_float(line, "grams", grams)) {
+            bool ok = false;
+            if (strcmp(tank, "a") == 0) {
+                ok = calibracion_set_capacity_a(grams);
+            } else if (strcmp(tank, "b") == 0) {
+                ok = calibracion_set_capacity_b(grams);
+            }
+            if (ok) {
+                responder_ack(ack_id, true, nullptr);
+                return;
+            }
+        }
+        responder_ack(ack_id, false, "invalid_capacity");
+        return;
+    }
+
+    // =========================================================================
+    // Comando: {"cmd":"cal_flow","pulses_per_l":450}
+    // Fija el factor K del caudalímetro (10..10000 pulsos/L) en RAM.
+    // =========================================================================
+    if (strcmp(cmd_name, "cal_flow") == 0) {
+        float k = 0.0f;
+        if (extract_json_float(line, "pulses_per_l", k) && calibracion_set_flow_k(k)) {
+            responder_ack(ack_id, true, nullptr);
+            return;
+        }
+        responder_ack(ack_id, false, "invalid_flow_k");
+        return;
+    }
+
+    // =========================================================================
     // Comando: {"id":"c1","cmd":"set","target":"pump","value":true|false}
     // Control de actuadores físicos con interlocks y watchdog.
     // =========================================================================
