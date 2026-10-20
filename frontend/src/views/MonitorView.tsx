@@ -108,7 +108,7 @@ export function MonitorView() {
               <ShieldAlertIcon width="16" height="16" />
               <span>
                 {alarms['sensor_fault']
-                  ? 'Fallo de Sensores'
+                  ? 'Fallo de Sensores de Nivel'
                   : alarms['pump_timeout']
                   ? 'Bomba Apagada por Watchdog (60 s)'
                   : alarms['overflow_a'] || alarms['overflow_b']

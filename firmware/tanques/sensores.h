@@ -69,7 +69,8 @@ bool sensores_get_overflow_a();
 bool sensores_get_overflow_b();
 
 /**
- * Retorna true si hay falla activa en cualquiera de los sensores.
+ * Retorna true si hay falla en las celdas de carga (HX711) o en su plausibilidad.
+ * La temperatura (DS18B20) no cuenta: su falla solo se informa con temp_c null.
  */
 bool sensores_get_sensor_fault();
 

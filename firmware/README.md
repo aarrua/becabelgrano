@@ -225,7 +225,7 @@ Comportamiento con `MODO_SIM_SIN_SENSORES 1`:
 
 ### 7.2 Comportamiento con `MODO_SIM_SIN_SENSORES 0`
 
-Con `0`, el firmware lee los sensores físicos y aplica interlocks estrictos. Si el Uno se prueba solo, **sin los sensores conectados**, los HX711 no responden y los DS18B20 no se detectan, por lo que `sensor_fault` queda en `true`. **Todo intento de encendido (`value: true`) se rechaza** de inmediato con:
+Con `0`, el firmware lee los sensores físicos y aplica interlocks estrictos. Si el Uno se prueba solo, **sin los sensores conectados**, los HX711 no responden, por lo que `sensor_fault` queda en `true` (los DS18B20 no detectados solo dejan `temp_c` en `null`). **Todo intento de encendido (`value: true`) se rechaza** de inmediato con:
 
 ```json
 {"ack":"<id>","ok":false,"reason":"sensor_fault"}

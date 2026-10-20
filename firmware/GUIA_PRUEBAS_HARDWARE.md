@@ -280,7 +280,9 @@ Procedimiento (desde la Raspberry Pi, en `infra/`):
 El firmware del Arduino Uno contiene lógica de interlock autónomo en hardware para proteger la instalación física:
 
 ### Caso A: Rechazo por Falla de Sensores (`sensor_fault`)
-1. Desconectar los cables DOUT de los módulos HX711 o el bus DS18B20.
+> Desconectar el bus DS18B20 **no** dispara este caso: la temperatura pasa a `temp_c: null` pero `sensor_fault` no cambia y el encendido no se rechaza por ese motivo.
+
+1. Desconectar los cables DOUT de los módulos HX711.
 2. En la telemetría se reportará `"sensor_fault": true`.
 3. Intentar encender la bomba:
    ```json

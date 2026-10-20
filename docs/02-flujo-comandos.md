@@ -104,7 +104,7 @@ El firmware limita el bombeo continuo a **60 s** (`PUMP_MAX_RUNTIME_MS` en `firm
 1. Al recibir `set pump=true` aceptado, el firmware inicia el temporizador de bombeo continuo.
 2. Si transcurren 60 s sin apagado, el firmware abre el relé y publica `alarms.pump_timeout = true`. La telemetría reporta `actuators.pump = false`.
 3. El bridge, InfluxDB y el backend propagan la alarma sin cambios. La SPA la muestra de forma persistente: indicador de alarma en la barra superior ("Bomba Apagada por Watchdog (60 s)") y banner de advertencia en la vista de monitoreo.
-4. El **docente reenciende a mano** con el botón "Encender Bomba". Un nuevo `set pump=true` aceptado reinicia el temporizador y limpia `pump_timeout`. Si hay un interlock activo (`overflow_a`, `overflow_b`, `sensor_fault`) o la telemetría está obsoleta (> 5 s, `telemetry_stale`), el encendido se rechaza como en cualquier otro caso.
+4. El **docente reenciende a mano** con el botón "Encender Bomba". Un nuevo `set pump=true` aceptado reinicia el temporizador y limpia `pump_timeout`. Si hay un interlock activo (`overflow_a`, `overflow_b`, `sensor_fault`; este último solo por fallo de celdas de carga, no de temperatura) o la telemetría está obsoleta (> 5 s, `telemetry_stale`), el encendido se rechaza como en cualquier otro caso.
 
 No existe keep-alive: ni el backend ni la SPA reenvían `set pump=true` de forma automática. Cada ciclo de bombeo de más de 60 s es una decisión explícita del docente y queda registrado en la auditoría (sección 4).
 

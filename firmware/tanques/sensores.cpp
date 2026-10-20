@@ -129,6 +129,8 @@ void sensores_read(LecturasSensores &out) {
 
     // =========================================================================
     // A. Sensores de Temperatura DS18B20 (lectura de conversión previa)
+    //    Monitoreo pasivo: una lectura inválida emite temp_c null pero NO levanta
+    //    sensor_fault, que queda reservado a las celdas de carga y su plausibilidad.
     // =========================================================================
     DeviceAddress addr_a = DS18B20_ADDR_A;
     DeviceAddress addr_b = DS18B20_ADDR_B;
@@ -150,7 +152,6 @@ void sensores_read(LecturasSensores &out) {
     } else {
         out.tank_a_temp_valid = false;
         out.tank_a_temp_c = 0.0f;
-        fault = true;
     }
 
     if (tB != DEVICE_DISCONNECTED_C && tB >= -55.0f && tB <= 125.0f) {
@@ -159,7 +160,6 @@ void sensores_read(LecturasSensores &out) {
     } else {
         out.tank_b_temp_valid = false;
         out.tank_b_temp_c = 0.0f;
-        fault = true;
     }
 
     // Disparar próxima conversión no bloqueante para el ciclo siguiente

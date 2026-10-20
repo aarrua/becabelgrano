@@ -25,7 +25,7 @@ function mapInterlockReason(reason?: string): string {
     return 'Interlock de sobrellenado activo: Nivel crítico en Tanque B (> 85%)'
   }
   if (reason.toLowerCase().includes('sensor_fault')) {
-    return 'Interlock de seguridad activo: Falla o desconexión en sensores'
+    return 'Interlock de seguridad activo: Falla o desconexión en las celdas de carga (nivel)'
   }
   if (reason.toLowerCase().includes('not_calibrated')) {
     return 'Encendido bloqueado: el equipo no está calibrado (tara, escala y capacidad de ambos tanques)'
