@@ -24,6 +24,62 @@
 
 ---
 
+## 1.1 PASO OBLIGATORIO: Calibrar celdas y caudalímetro ANTES de conectar la bomba real
+
+> **ADVERTENCIA DE SEGURIDAD:** No conectar la bomba real a la alimentación ni hacer circular agua hasta completar este paso y su lista de verificación (sección 1.1.6).
+
+### 1.1.1 Por qué es obligatorio
+
+El firmware calcula el nivel de cada tanque así (`firmware/tanques/sensores.cpp`):
+
+```text
+peso_g    = (lectura_cruda - tara) / escala
+level_pct = peso_g / capacidad_maxima_g * 100
+```
+
+Los valores de fábrica en `firmware/tanques/calibracion.cpp` son **nominales, de ejemplo**: tara `0`, escala `420` cuentas/g, capacidad `4000 g` (A) y `2450 g` (B), y `450` pulsos/L para el caudalímetro (YF-S201). Con esos valores **`level_pct` es incorrecto**. Como el interlock de sobrellenado (`overflow_a` / `overflow_b`, umbral 85 %) y el corte automático de la bomba se evalúan sobre `level_pct`, **un nivel subestimado puede no activar el interlock y el tanque puede desbordar**. Un caudal mal calibrado distorsiona además `flow_lpm`.
+
+### 1.1.2 Preparación
+
+1. En `firmware/tanques/config.h`: `MODO_SIM_SIN_SENSORES` en `0`. Con `1` los interlocks por sensores están **deshabilitados**, por lo que **nunca** se debe conectar la bomba real en ese modo.
+2. Cargar las direcciones DS18B20 reales y poner `DS18B20_SON_DIRECCIONES_DE_EJEMPLO` en `0` (Prueba 2 de esta guía).
+3. Con la bomba **desconectada** (el módulo relé puede quedar conectado como testigo).
+
+### 1.1.3 Capacidad máxima y factor K (se cambian en el código)
+
+**No existe comando serie para `max_weight_a`, `max_weight_b` ni `flow_k_factor`.** Se modifican en `calibracion_reset_defaults()` de `firmware/tanques/calibracion.cpp` y hay que volver a cargar el sketch.
+
+1. Medir la capacidad útil real de cada tanque (la masa de agua, en gramos, que corresponde al 100 %) y ponerla en `max_weight_a` y `max_weight_b`.
+2. **Calibrar el caudalímetro** (sin usar la bomba): pasar por el caudalímetro, a mano o por gravedad, un volumen conocido (por ejemplo 1 L medido con una jarra graduada) a caudal aproximadamente constante y cronometrar el tiempo `T`. Calcular el caudal real `V / T` en L/min y compararlo con el promedio de `flow_lpm` de la telemetría durante esa pasada. Repetir al menos 3 veces y promediar:
+   $$K_{nuevo} = K_{actual} \times \frac{\text{flow\_lpm medido}}{\text{caudal real}}$$
+   Poner `K_nuevo` en `flow_k_factor`.
+3. Cargar el sketch. **Atención:** si ya hay una calibración válida en la EEPROM, el firmware la carga al arrancar y **pisa los valores nuevos** de la capacidad y del factor K. En ese caso, enviar `reset_cal` y luego `save_cal` (sección 4, "Calibrar con el sistema armado") para adoptar los valores nuevos. `reset_cal` también restaura tara y escala por defecto, así que **hacer esto antes de los pasos 1.1.4**.
+
+### 1.1.4 Celdas de carga: tara y escala con peso conocido
+
+Seguir la sección 4 (Prueba 3) completa, para **ambos** tanques:
+
+1. **Tara** con la plataforma vacía y estable (`tare`).
+2. **Escala** con una masa patrón conocida (`cal_scale`), usando la fórmula de la sección 4. Para mejores resultados, usar una masa cercana al rango de operación.
+3. Verificar con una segunda masa distinta que `weight_g` coincide con el valor real. Criterio sugerido: error menor al 2 % en ambos tanques; si no, repetir la escala.
+4. Persistir con `save_cal` y comprobar tras un `RESET` del Arduino que los valores se conservan.
+
+### 1.1.5 Comprobar el interlock de nivel con la calibración hecha
+
+Con la bomba aún desconectada, cargar el tanque con una masa/volumen conocido equivalente a más del 85 % de `max_weight` y confirmar `overflow_a` u `overflow_b` en `true` y el rechazo del encendido (Prueba 5, Caso B). Repetir para **ambos** tanques: el umbral de 85 % aplica a cualquiera de los dos.
+
+### 1.1.6 Lista de verificación previa a conectar la bomba
+
+- [ ] `MODO_SIM_SIN_SENSORES` en `0` y direcciones DS18B20 reales.
+- [ ] `max_weight_a` y `max_weight_b` iguales a la capacidad real medida.
+- [ ] `flow_k_factor` calibrado con volumen conocido.
+- [ ] Tara y escala de A y B calibradas y verificadas con una segunda masa.
+- [ ] `save_cal` ejecutado y persistencia comprobada tras un `RESET`.
+- [ ] Interlock `overflow_a` / `overflow_b` comprobado a 85 % en ambos tanques.
+- [ ] Valores finales (tara, escala, capacidad, K) anotados en la bitácora del kit.
+
+---
+
 ## 2. Prueba 1: Relé de Bomba y Watchdog de Seguridad (Sin Sensores)
 
 Esta prueba verifica el accionamiento seguro de la bomba y el corte automático por tiempo continuo (watchdog de 60 segundos). Puede realizarse con el Arduino solo o con el módulo relé conectado.
