@@ -182,7 +182,7 @@ Al completar cada fase:
      - Pulido de visualización, resiliencia y documentación operativa sin secretos en `docs/05-verificacion-e2e.md` (Etapa 5).
      - Pendiente: Firmware en Arduino Uno (Etapa 6).
 4. **Firmware definitivo del Arduino Uno**:
-   - **Completado en Fase 4 (Sub-etapa 6.1)**: Esqueleto modular en `firmware/tanques/`, modo `MODO_SIM_SIN_SENSORES`, relé forzado a apagado en arranque, parser de comandos seriales sin `String` ni `ArduinoJson`, y emisión de telemetría periódica JSON v1 (consumo: 11% Flash, 17% RAM).
+   - **Completado en Fase 4 (Sub-etapa 6.1)**: Esqueleto modular en `firmware/tanques/`, modo `MODO_SIM_SIN_SENSORES`, relé forzado a apagado en arranque, parser de comandos seriales sin `String` ni `ArduinoJson`, y emisión de telemetría periódica JSON v1 (consumo: 11% Flash, 17% RAM). Probado y verificado en hardware real (Arduino Uno en `COM5` sin sensores) de punta a punta con bridge, InfluxDB, backend y SPA. Completados los 6 ajustes de robustecimiento ante valores nulos, logging, documentación de librerías aprobadas (`HX711 0.7.5`, `OneWire 2.3.8`, `DallasTemperature 4.0.6`, `Adafruit NeoPixel 1.15.5`, core `1.8.8`) y parsing serial simplificado.
    - Pendientes: Sub-etapas 6.2 (sensores reales e interlocks en firmware), 6.3 (NeoPixel) y 6.4 (Wokwi y cierre).
 5. **Calibrar el umbral del interlock (85 %) con el hardware físico real**:
    La apertura manual de la llave de interconexión Tanque A $\to$ Tanque B altera la tasa de descarga por gravedad y la altura máxima acumulada en B (llegó a ~97 % en simulaciones con vaciado en tránsito). En la puesta en marcha con hardware se debe calibrar el umbral y considerar un interlock de corte por volumen total combinado ($V_A + V_B$).

@@ -121,6 +121,13 @@ y este proyecto adhiere a [Conventional Commits](https://www.conventionalcommits
 - **Documentación de Hardware y Cableado (`docs/04-hardware.md`)**:
   - Creada especificación técnica completa con mapa de pines (`D0`-`D1` UART, `D2` Caudalímetro INT0, `D4`-`D7` HX711, `D8` OneWire, `D9` Relé, `D10`-`D11` NeoPixels, `D13` LED Diagnóstico).
   - Documentadas reglas de topología de alimentación: obligatoriedad de fuente externa de 5 V con GND común para cargas inductivas y tiras LED, capacitor de 1000 µF y resistencias de 330 Ω en líneas de datos NeoPixel.
+- **Ajustes y Robustecimiento post-prueba real en hardware (COM5)**:
+  - **Bridge (`edge/bridge.py`)**: Corregido `TypeError: must be real number, not NoneType` en `process_device_line` formateando de manera segura los campos nulos (`"s/d"`) en los logs periódicos. Agregado test automatizado `test_process_device_line_with_null_sensors_logging`.
+  - **Librerías y Core Aprobados (`firmware/README.md`)**: Documentadas las versiones exactas homologadas (`HX711 0.7.5`, `OneWire 2.3.8`, `DallasTemperature 4.0.6`, `Adafruit NeoPixel 1.15.5`) y `arduino:avr 1.8.8` con sus comandos de instalación en `arduino-cli`.
+  - **Parser de Comandos y Tolerancia a `ts` (`firmware/README.md`)**: Documentado que el microcontrolador ignora campos adicionales como `"ts"` y rechaza con códigos semánticos (`"unknown_cmd"`, `"malformed_cmd"`) si faltan campos obligatorios.
+  - **Excepción de Banco de Pruebas (`firmware/README.md`)**: Documentado que `MODO_SIM_SIN_SENSORES` permite accionar la bomba con `sensor_fault: true` únicamente como excepción para pruebas iniciales; en 6.2 se rechazará el encendido con `reason: "sensor_fault"` y se desactivará el define.
+  - **Soporte de Telemetría Nula en Backend y SPA**: Actualizado `TelemetryFrame` y `InfluxTelemetryProvider` con `parseNullableDouble` para mapear campos nulos cuando los sensores están ausentes o desconectados, y actualizada la SPA (`PumpControl`, `TankVisualizer`, `MonitorView`) para renderizar `--` en lugar de valores espurios. Incorporados tests unitarios y de serialización en `InfluxTelemetryProviderTest` y `TelemetryFrameSerializationTest`.
+  - **Invocación Serial Simplificada (`docs/05-verificacion-e2e.md`, `edge/README.md`)**: Documentado el uso directo de `--source serial:COM5` (o `/dev/ttyACM0`) aprovechando que `bridge.py` adopta automáticamente 115200 baudios por defecto sin requerir `:115200`.
 
 ### Planned (Fase 4 - Próximas Etapas)
 - **Etapa 6 (Sub-etapa 6.2)**: Integración de sensores reales (OneWire/DallasTemperature DS18B20 sin bloqueo en loop, HX711 x2 con celdas de 10 kg, caudalímetro por interrupciones en D2 e interlock definitivo en firmware).
