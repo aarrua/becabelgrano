@@ -186,6 +186,11 @@ y este proyecto adhiere a [Conventional Commits](https://www.conventionalcommits
 - **La temperatura deja de contar para `sensor_fault` (8b, sin campo nuevo)**: `temp_c` sale `null` si el DS18B20 falla, pero `sensor_fault` depende solo de las celdas de carga y su plausibilidad. Un DS18B20 caído ya no bloquea el encendido de la bomba. Actualizados `docs/01-contrato-datos.md`, `docs/02-flujo-comandos.md`, la guía de pruebas y los textos de la SPA ("Fallo de Sensores de Nivel").
 - **`tare` promedia 10 muestras del HX711** con un tope de 1,1 s en total; si alguna falla responde `sensor_not_ready` y conserva la tara vigente. Reemplaza `sensores_leer_raw_a/b` por `sensores_promediar_raw_a/b`.
 
+### Changed - Tara segura, umbral configurable en la SPA y checklist de calibración
+- **`tare` rechaza con `pump_on`** si la bomba está encendida, antes de leer el HX711, y `HX711_TARE_TIMEOUT_MS` sube a 2000. La guía de pruebas deja escrito que la tara va siempre con el tanque vacío y la bomba apagada (tarar con agua hace que el nivel se lea menor que el real y el corte llegue tarde).
+- **SPA**: `isOverflow` depende solo de `alarms.overflow_a/overflow_b`; etiqueta, línea y texto "Corte" usan `VITE_OVERFLOW_THRESHOLD_PCT` (default 85, ver `frontend/.env.example`).
+- **`AGENTS.md`**: checklist para cambiar el umbral de overflow y el de rearme en todos los componentes.
+
 ### Changed
 - Reemplazada en `firmware/GUIA_PRUEBAS_HARDWARE.md` la indicación de editar `calibracion.cpp` por los nuevos comandos de capacidad y factor K.
 
