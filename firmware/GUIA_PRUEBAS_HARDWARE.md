@@ -148,6 +148,42 @@ El kit utiliza dos convertidores HX711 de 24 bits para medir el peso del líquid
    Respuesta esperada: `{"ack":"cal","ok":true}`.
 3. **Comprobación de persistencia**: Presionar el botón `RESET` del Arduino Uno. Al reiniciar, el firmware cargará automáticamente los valores calibrados desde la EEPROM verificando su checksum.
 
+### Calibrar con el sistema armado (vía bridge y MQTT)
+
+Los comandos `tare`, `cal_scale`, `reset_cal` y `save_cal` **atraviesan el bridge hasta el puerto serie**: `edge/bridge.py` no filtra por nombre de comando y reenvía al Arduino cualquier JSON válido que traiga `id`. Por eso se puede calibrar con el kit completo en marcha, sin detener el bridge ni desconectar nada.
+
+Particularidades:
+
+- **El `id` es obligatorio.** El bridge descarta sin avisar al emisor cualquier comando sin `id` (solo lo registra en su log). Los ejemplos de los pasos A, B y C de arriba, sin `id`, solo sirven conectándose directo al Arduino por el Monitor Serie.
+- **El `id` debe ser único.** El bridge deduplica por `id` en una ventana de 100 comandos. Reusar un `id` ya procesado no reenvía nada al Arduino y republica el ack anterior.
+- **El ack llega con el `id` enviado** (`{"ack":"<id>","ok":true}`) en el tópico `tanques/ack`. Si el Arduino no responde en 2,5 s, el bridge publica `{"ack":"<id>","ok":false,"reason":"device_timeout"}`.
+- **No hay endpoint REST ni botón en la SPA.** El backend solo expone `/api/actuators/{name}`. La calibración se hace publicando en MQTT, por lo tanto **no queda en la auditoría de H2** y solo requiere las credenciales de Mosquitto.
+- Con el bridge en marcha, **no abrir el Monitor Serie** al mismo tiempo: el puerto serie admite un único proceso.
+- Calibrar siempre con la **bomba apagada**.
+
+Procedimiento (desde la Raspberry Pi, en `infra/`):
+
+1. En una terminal, dejar escuchando los acks:
+   ```bash
+   docker compose exec mosquitto mosquitto_sub -t "tanques/ack" -u tanques -P "<TU_CLAVE_MOSQUITTO>" -v
+   ```
+2. En otra terminal, publicar cada comando con un `id` nuevo. Ejemplo de tara del Tanque A con el tanque vacío:
+   ```bash
+   docker compose exec mosquitto mosquitto_pub -t "tanques/cmd" -u tanques -P "<TU_CLAVE_MOSQUITTO>" \
+     -q 1 -m '{"id":"cal-tare-a-1","cmd":"tare","tank":"a"}'
+   ```
+   Se espera ver en la primera terminal: `tanques/ack {"ack":"cal-tare-a-1","ok":true}`.
+3. Repetir con el resto de los comandos (cada uno con su `id` propio):
+   ```text
+   {"id":"cal-tare-b-1","cmd":"tare","tank":"b"}
+   {"id":"cal-scale-a-1","cmd":"cal_scale","tank":"a","scale":415.8}
+   {"id":"cal-scale-b-1","cmd":"cal_scale","tank":"b","scale":415.8}
+   {"id":"cal-reset-1","cmd":"reset_cal"}
+   {"id":"cal-save-1","cmd":"save_cal"}
+   ```
+4. Verificar el resultado en `weight_g` y `level_pct` de la telemetría (SPA, Grafana o `mosquitto_sub -t "tanques/#"` si corresponde) antes de pasar al siguiente comando.
+5. Ejecutar `save_cal` solo cuando los valores sean los definitivos. `reset_cal` restaura los valores por defecto **solo en RAM**; lo guardado en EEPROM se recupera con un reinicio del Arduino.
+
 ---
 
 ## 5. Prueba 4: Caudalímetro de Efecto Hall
