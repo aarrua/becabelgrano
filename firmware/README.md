@@ -190,20 +190,35 @@ Respuesta ante rechazo o condición de interlock:
 
 ## 7. Modo de Simulación sin Sensores (`MODO_SIM_SIN_SENSORES`)
 
-En `firmware/tanques/config.h` se define:
-```c
-#define MODO_SIM_SIN_SENSORES 1
+La constante se define en `firmware/tanques/config.h`. **El valor por defecto del repositorio es `0`** (firmware definitivo con sensores reales).
+
+### 7.1 Cómo activar el modo para probar el Uno solo
+
+1. Abrir `firmware/tanques/config.h` y cambiar:
+   ```c
+   #define MODO_SIM_SIN_SENSORES 1
+   ```
+2. Volver a compilar y cargar el sketch en el Arduino Uno (por ejemplo con `arduino-cli compile` y `arduino-cli upload`, o desde el Arduino IDE). La constante se resuelve en tiempo de compilación, por lo que **no se puede cambiar en caliente**.
+3. Con el Uno conectado solo por USB, enviar comandos por el Monitor Serie (115200 baud) o a través del bridge.
+4. Al terminar, **volver a `0`** y recargar el sketch antes de cablear sensores o conectar la bomba.
+
+Comportamiento con `MODO_SIM_SIN_SENSORES 1`:
+
+- Todas las lecturas de tanques, temperatura y caudal se reportan como `null`, y `sensor_fault` es `true`.
+- Como **excepción exclusiva para pruebas de banco**, el firmware acepta el encendido de la bomba (conmuta el pin D9 y el LED integrado del pin 13) aunque `sensor_fault` sea `true`. Sirve para validar la cadena serie $\to$ bridge $\to$ MQTT $\to$ backend.
+- Los interlocks por sensores (`sensor_fault`, `overflow_a`, `overflow_b`) quedan **deshabilitados**. Nunca usar este modo con la bomba real conectada.
+
+### 7.2 Comportamiento con `MODO_SIM_SIN_SENSORES 0`
+
+Con `0`, el firmware lee los sensores físicos y aplica interlocks estrictos. Si el Uno se prueba solo, **sin los sensores conectados**, los HX711 no responden y los DS18B20 no se detectan, por lo que `sensor_fault` queda en `true`. **Todo intento de encendido (`value: true`) se rechaza** de inmediato con:
+
+```json
+{"ack":"<id>","ok":false,"reason":"sensor_fault"}
 ```
 
-- **Propósito y excepción para pruebas (Sub-etapa 6.1)**:
-  Permite validar el microcontrolador de forma aislada en banco de trabajo sin cablear sensores físicos. En este modo, todas las lecturas de tanques y caudal se reportan como `null`, y la bandera `sensor_fault` se fija en `true`. Como **excepción exclusiva para pruebas de integración inicial**, el firmware permite el encendido y apagado de la bomba (conmutando el pin D9 y el LED integrado L en pin 13) para validar la cadena completa serie $\to$ bridge $\to$ MQTT $\to$ backend.
-- **Comportamiento requerido en Sub-etapa 6.2 (Firmware definitivo)**:
-  Al incorporar los sensores físicos (HX711, DS18B20, caudalímetro), el firmware aplicará interlocks estrictos: ante cualquier condición de `sensor_fault == true`, **todo intento de encendido (`value: true`) deberá ser rechazado de inmediato** por el microcontrolador con:
-  ```json
-  {"ack":"<id>","ok":false,"reason":"sensor_fault"}
-  ```
-  El comando de apagado (`value: false`) permanecerá siempre habilitado por seguridad física.
-  En el firmware definitivo para puesta en marcha con hardware, `#define MODO_SIM_SIN_SENSORES 0` quedará desactivado.
+El comando de apagado (`value: false`) siempre se acepta por seguridad física. Este rechazo no es un error: es el comportamiento esperado e indica que el interlock funciona.
+
+Con `0` y sensores conectados, antes de usar la bomba real hay que completar la calibración obligatoria de `firmware/GUIA_PRUEBAS_HARDWARE.md` (sección 1.1).
 
 ---
 
