@@ -299,6 +299,11 @@ static void procesar_comando_linea(const char *line) {
         if (extract_json_string(line, "tank", tank, sizeof(tank))) {
             bool es_a = (strcmp(tank, "a") == 0);
             if (es_a || strcmp(tank, "b") == 0) {
+                // La tara se hace con la bomba apagada: se chequea antes de tocar el HX711
+                if (actuadores_get_bomba()) {
+                    responder_ack(ack_id, false, "pump_on");
+                    return;
+                }
                 long raw = 0;
                 // Promedio de varias muestras; si alguna falla no se toca la tara vigente
                 bool leido = es_a ? sensores_promediar_raw_a(raw) : sensores_promediar_raw_b(raw);

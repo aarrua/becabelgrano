@@ -92,7 +92,7 @@
 // a 80 Hz, ~125 ms). Si alguna muestra no está lista a tiempo o está saturada,
 // la tara se rechaza con sensor_not_ready y no se modifica.
 #define HX711_TARE_MUESTRAS        10
-#define HX711_TARE_TIMEOUT_MS      1100UL
+#define HX711_TARE_TIMEOUT_MS      2000UL
 
 // ==============================================================================
 // Watchdog de Seguridad de Bomba (Tiempo Máximo de Bombeo Continuo)

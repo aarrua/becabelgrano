@@ -148,7 +148,8 @@ Si un interlock de seguridad está activo (por ejemplo, el Tanque A o Tanque B s
 - `"overflow_b"`: Intento de encender la bomba cuando el nivel del Tanque B supera el umbral crítico ($>95\%$).
 - `"sensor_fault"`: Interlock por fallo o lectura espuria de las celdas de carga (nivel). La temperatura no interviene: con el DS18B20 caído el encendido no se rechaza por este motivo.
 - `"not_calibrated"`: Intento de encender la bomba mientras el firmware no tiene calibración confiable (EEPROM válida, o tara, escala y capacidad de ambos tanques fijadas en la sesión). Lo emite el Arduino; el bridge lo reenvía sin cambios, el backend lo responde como `409 Conflict` con `reason: "not_calibrated"` y la SPA lo muestra como mensaje de interlock. El apagado nunca se rechaza por este motivo.
-- `"sensor_not_ready"`: Respuesta a `tare` cuando alguna de las 10 muestras promediadas del HX711 no está lista dentro de ~1,1 s o está saturada; no cambia la tara. No es un rechazo de bomba.
+- `"sensor_not_ready"`: Respuesta a `tare` cuando alguna de las 10 muestras promediadas del HX711 no está lista dentro de 2 s o está saturada; no cambia la tara. No es un rechazo de bomba.
+- `"pump_on"`: Respuesta a `tare` cuando la bomba está encendida. Se chequea antes de leer el HX711 y no cambia la tara. No es un rechazo de bomba; apagar la bomba y reintentar.
 - `"unknown_target"`: El actuador especificado en `target` no existe o no está registrado.
 - `"invalid_command"`: Estructura de trama JSON no válida o comando no soportado.
 - `"invalid_value"`: El valor suministrado no coincide con el tipo esperado por el actuador.

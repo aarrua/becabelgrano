@@ -79,6 +79,7 @@ Un valor fuera de rango, no numérico o con un `tank` distinto de `a`/`b` se rec
 Seguir la sección 4 (Prueba 3) completa, para **ambos** tanques:
 
 1. **Tara** con la plataforma vacía y estable (`tare`).
+   > **La tara se hace SIEMPRE con el tanque vacío y la bomba apagada.** Si se tara con agua en el tanque, ese peso queda como "cero": el nivel se lee menor que el real y el corte por sobrellenado llega tarde (el tanque se llena más allá del umbral antes de que el firmware lo detecte). Por eso el firmware rechaza `tare` con `reason: "pump_on"` si la bomba está encendida; lo que no puede detectar es agua ya presente en el tanque, eso es responsabilidad de quien calibra.
 2. **Escala** con una masa patrón conocida (`cal_scale`), usando la fórmula de la sección 4. Para mejores resultados, usar una masa cercana al rango de operación.
 3. Verificar con una segunda masa distinta que `weight_g` coincide con el valor real. Criterio sugerido: error menor al 2 % en ambos tanques; si no, repetir la escala.
 4. Persistir con `save_cal` y comprobar tras un `RESET` del Arduino que los valores se conservan.
@@ -362,8 +363,11 @@ Hacer estas pruebas con la **bomba real desconectada** (usar una lámpara o el L
 ### Caso 7.6: `cal_scale` con valores inválidos
 Enviar `{"id":"s1","cmd":"cal_scale","tank":"a","scale":0}`, `"scale":-5`, `"scale":1e999` y `"scale":200000`. **Esperado**: `{"ack":"s1","ok":false,"reason":"invalid_scale"}` en todos y la escala vigente sin cambios.
 
+### Caso 7.6b: `tare` con la bomba encendida
+Con la bomba encendida (lámpara de prueba) enviar `{"id":"t0","cmd":"tare","tank":"a"}`. **Esperado**: `{"ack":"t0","ok":false,"reason":"pump_on"}` y la tara vigente sin cambios. Apagar la bomba y repetir: `ok:true`.
+
 ### Caso 7.7: `tare` con el HX711 no listo
-El `tare` promedia 10 muestras (`HX711_TARE_MUESTRAS`) y puede tardar hasta ~1 s con el HX711 a 10 Hz; el ack llega recién al terminar. Desconectar el HX711 del Tanque A y enviar `{"id":"t1","cmd":"tare","tank":"a"}`. **Esperado**: `{"ack":"t1","ok":false,"reason":"sensor_not_ready"}`; al reconectar, la tara anterior sigue vigente hasta un `tare` exitoso.
+El `tare` promedia 10 muestras (`HX711_TARE_MUESTRAS`) y puede tardar ~1 s con el HX711 a 10 Hz (tope de 2 s, `HX711_TARE_TIMEOUT_MS`); el ack llega recién al terminar. Desconectar el HX711 del Tanque A y enviar `{"id":"t1","cmd":"tare","tank":"a"}`. **Esperado**: `{"ack":"t1","ok":false,"reason":"sensor_not_ready"}`; al reconectar, la tara anterior sigue vigente hasta un `tare` exitoso.
 
 ### Caso 7.8: Ids largos
 Enviar un `set` con `id` de 36 caracteres (`"id":"123e4567-e89b-12d3-a456-426614174000"`) con el campo `"ts"` incluido. **Esperado**: el ack vuelve con el mismo `id` completo.
