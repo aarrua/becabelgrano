@@ -70,7 +70,9 @@ Un valor fuera de rango, no numérico o con un `tank` distinto de `a`/`b` se rec
 3. Ejecutar `save_cal` cuando los valores sean los definitivos (Paso C de la sección 4). Sin `save_cal`, un `RESET` o un corte de energía restaura lo guardado en la EEPROM (o los valores de fábrica).
 4. Con el bridge en marcha, los comandos se envían por MQTT con `id` único (ver "Calibrar con el sistema armado", sección 4).
 
-> `reset_cal` restaura **todos** los parámetros (tara, escala, capacidad y K) a los valores de fábrica en RAM.
+> `reset_cal` restaura **todos** los parámetros (tara, escala, capacidad y K) a los valores de fábrica en RAM y deja el equipo **sin calibrar**: el encendido de la bomba se rechaza con `not_calibrated` hasta volver a fijar tara, escala y capacidad de ambos tanques.
+>
+> El firmware considera el equipo calibrado si la calibración viene de una EEPROM válida o si en la sesión se fijaron `tare`, `cal_scale` y `set_capacity` de **ambos** tanques. `save_cal` se rechaza con `not_calibrated` si no se cumple, para no persistir valores de fábrica. La capacidad por defecto es 2000 g (menor que el cilindro más chico).
 
 ### 1.1.4 Celdas de carga: tara y escala con peso conocido
 
@@ -228,6 +230,7 @@ Los comandos `tare`, `cal_scale`, `set_capacity`, `cal_flow`, `reset_cal` y `sav
 Particularidades:
 
 - **El `id` es obligatorio.** El bridge descarta sin avisar al emisor cualquier comando sin `id` (solo lo registra en su log). Los ejemplos de los pasos A, B y C de arriba, sin `id`, solo sirven conectándose directo al Arduino por el Monitor Serie.
+- **Longitud del `id`: hasta 36 caracteres** (alcanza para un UUID con guiones). Un `id` más largo no se reconoce y el comando se rechaza como `missing_id`/`unknown_cmd`.
 - **El `id` debe ser único.** El bridge deduplica por `id` en una ventana de 100 comandos. Reusar un `id` ya procesado no reenvía nada al Arduino y republica el ack anterior.
 - **El ack llega con el `id` enviado** (`{"ack":"<id>","ok":true}`) en el tópico `tanques/ack`. Si el Arduino no responde en 2,5 s, el bridge publica `{"ack":"<id>","ok":false,"reason":"device_timeout"}`.
 - **No hay endpoint REST ni botón en la SPA.** El backend solo expone `/api/actuators/{name}`. La calibración se hace publicando en MQTT, por lo tanto **no queda en la auditoría de H2** y solo requiere las credenciales de Mosquitto.
@@ -317,3 +320,48 @@ El firmware del Arduino Uno contiene lógica de interlock autónomo en hardware 
    ```json
    {"ack":"cmd_safe_3","ok":true}
    ```
+
+---
+
+## 7. Pruebas de la revisión de seguridad del firmware
+
+Hacer estas pruebas con la **bomba real desconectada** (usar una lámpara o el LED `D13` como testigo del relé). `MODO_SIM_SIN_SENSORES` en `0` salvo que se indique.
+
+### Caso 7.1: Cable de celda cortado con la bomba encendida (fail-safe)
+1. Con el equipo calibrado y ambos niveles válidos, encender la bomba (`set`/`pump`/`true`, ack `ok:true`).
+2. Desconectar el cable de datos (DOUT) de la celda/HX711 del Tanque A (o del B).
+3. **Esperado**: en la trama siguiente (≤ 1 s) `alarms.sensor_fault` en `true`, `level_pct` y `weight_g` de ese tanque en `null`, `actuators.pump` en `false`, y la lámpara se apaga. La bomba no queda encendida sin vigilancia.
+4. Intentar encender de nuevo: ack `{"ok":false,"reason":"sensor_fault"}`. Reconectar el cable: el `sensor_fault` se limpia solo y se puede volver a encender.
+5. Repetir con el cable de la celda puesto a +5 V/GND para forzar un valor saturado (plausibilidad): `sensor_fault` en `true` y niveles `null`.
+
+### Caso 7.2: Plausibilidad del peso (sin recorte a 0)
+1. Con la plataforma vacía y tarada, el `weight_g` puede mostrar valores levemente negativos (p. ej. `-3.2`): ya no se recortan a 0; `level_pct` se acota a `0.0`.
+2. Quitar la masa tras tarar con una masa encima (peso < -50 g, `HX711_PESO_MIN_PLAUSIBLE_G`): **esperado** `sensor_fault` en `true` y `weight_g`/`level_pct` en `null`. Volver a tarar con la plataforma vacía.
+
+### Caso 7.3: Calibración faltante (`not_calibrated`)
+1. Con la EEPROM sin guardar (o tras `reset_cal`), reiniciar el Uno y enviar `{"id":"nc1","cmd":"set","target":"pump","value":true}`.
+2. **Esperado**: `{"ack":"nc1","ok":false,"reason":"not_calibrated"}`; con el backend: HTTP 409 con `reason: "not_calibrated"` y mensaje específico en la SPA.
+3. `{"id":"nc2","cmd":"save_cal"}` en ese estado: también `not_calibrated`.
+4. Enviar `tare` y `cal_scale` de A y B y `set_capacity` de A y B (todos `ok:true`): el encendido pasa a aceptarse. Un solo comando faltante mantiene el rechazo.
+5. `save_cal`, `RESET` del Uno: sigue aceptando el encendido sin recalibrar (EEPROM válida).
+6. `{"id":"nc3","cmd":"reset_cal"}`: vuelve a rechazar con `not_calibrated`.
+7. El apagado (`value:false`) se acepta siempre.
+
+### Caso 7.4: Relé con lámpara (`PERMITIR_BOMBA_SIN_CALIBRAR`)
+1. Conectar una lámpara a 220 V **solo** a través del módulo relé, con la bomba y el agua fuera del circuito. Poner `PERMITIR_BOMBA_SIN_CALIBRAR` en `1` (el compilador mostrará un `#warning`) y cargar el sketch.
+2. Con sensores conectados pero sin calibrar, `set`/`pump`/`true` enciende la lámpara y `false` la apaga. Con sensores desconectados sigue rechazando por `sensor_fault`; para probar solo el relé usar `MODO_SIM_SIN_SENSORES 1`.
+3. **Volver `PERMITIR_BOMBA_SIN_CALIBRAR` a `0` y recargar** antes de conectar la bomba real.
+
+### Caso 7.5: Reset del Uno con el relé
+1. Con la lámpara conectada y la bomba encendida, presionar `RESET` en el Uno y luego reconectar el USB (reinicia el Uno).
+2. **Esperado**: la lámpara se apaga y **no** se enciende ni parpadea durante el arranque (relé activo en alto o en bajo: `digitalWrite` del nivel de apagado antes de `pinMode`). Tras el arranque, `actuators.pump` es `false`. Observar con un osciloscopio o con la lámpara sobre un relé activo en bajo (`RELE_ACTIVO_ALTO 0`).
+3. Verificar que la bomba **no** se reenciende sola tras el reset.
+
+### Caso 7.6: `cal_scale` con valores inválidos
+Enviar `{"id":"s1","cmd":"cal_scale","tank":"a","scale":0}`, `"scale":-5`, `"scale":1e999` y `"scale":200000`. **Esperado**: `{"ack":"s1","ok":false,"reason":"invalid_scale"}` en todos y la escala vigente sin cambios.
+
+### Caso 7.7: `tare` con el HX711 no listo
+Desconectar el HX711 del Tanque A y enviar `{"id":"t1","cmd":"tare","tank":"a"}`. **Esperado**: `{"ack":"t1","ok":false,"reason":"sensor_not_ready"}`; al reconectar, la tara anterior sigue vigente hasta un `tare` exitoso.
+
+### Caso 7.8: Ids largos
+Enviar un `set` con `id` de 36 caracteres (`"id":"123e4567-e89b-12d3-a456-426614174000"`) con el campo `"ts"` incluido. **Esperado**: el ack vuelve con el mismo `id` completo.
