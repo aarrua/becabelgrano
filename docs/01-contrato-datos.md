@@ -55,7 +55,8 @@ La telemetría se emite a una tasa nominal de **1 Hz (1 trama por segundo)**.
   "alarms": {
     "overflow_a": false,
     "overflow_b": false,
-    "sensor_fault": false
+    "sensor_fault": false,
+    "pump_timeout": false
   },
   "mode": "auto"
 }
@@ -69,20 +70,21 @@ La telemetría se emite a una tasa nominal de **1 Hz (1 trama por segundo)**.
 | `seq` | Integer | - | `0` a `4294967295` | Número de secuencia incremental para detectar pérdidas de tramas. |
 | `uptime_ms` | Integer | ms | $\ge 0$ | Milisegundos transcurridos desde el arranque del Arduino Uno. |
 | **`tank_a`** | Object | - | - | Mediciones del Tanque A (tanque superior). |
-| `tank_a.weight_g` | Float | g (gramos) | `0.0` a `5000.0` | Masa líquida neta calculada por celda de carga tarada. |
+| `tank_a.weight_g` | Float | g (gramos) | `0.0` a `5000.0` | Masa líquida neta calculada por celda de carga tarada. Puede ser levemente negativa (hasta -50 g, deriva de tara); por debajo la lectura se invalida (`null` + `sensor_fault`). |
 | `tank_a.level_pct` | Float | % | `0.0` a `100.0` | Nivel relativo de llenado según la capacidad máxima calibrada. |
-| `tank_a.temp_c` | Float | °C | `-10.0` a `80.0` | Temperatura del fluido (sensor sumergido, solo monitoreo). |
+| `tank_a.temp_c` | Float | °C | `-10.0` a `80.0` | Temperatura del fluido (sensor sumergido, solo monitoreo). `null` si el sensor falla, sin levantar `sensor_fault`. |
 | **`tank_b`** | Object | - | - | Mediciones del Tanque B (tanque inferior). |
-| `tank_b.weight_g` | Float | g (gramos) | `0.0` a `5000.0` | Masa líquida neta calculada por celda de carga tarada. |
+| `tank_b.weight_g` | Float | g (gramos) | `0.0` a `5000.0` | Masa líquida neta calculada por celda de carga tarada. Puede ser levemente negativa (hasta -50 g, deriva de tara); por debajo la lectura se invalida (`null` + `sensor_fault`). |
 | `tank_b.level_pct` | Float | % | `0.0` a `100.0` | Nivel relativo de llenado según la capacidad máxima calibrada. |
-| `tank_b.temp_c` | Float | °C | `-10.0` a `80.0` | Temperatura del fluido (sensor sumergido, solo monitoreo). |
+| `tank_b.temp_c` | Float | °C | `-10.0` a `80.0` | Temperatura del fluido (sensor sumergido, solo monitoreo). `null` si el sensor falla, sin levantar `sensor_fault`. |
 | `flow_lpm` | Float | L/min | `0.0` a `10.0` | Caudal volumétrico instantáneo medido en la línea de impulsión. |
 | **`actuators`** | Object | Map | Extensible | Estado de todos los actuadores del kit. |
 | `actuators.pump` | Boolean | - | `true` \| `false` | Estado actual de encendido (`true`) o apagado (`false`) de la bomba. |
 | **`alarms`** | Object | Map | Extensible | Banderas booleanas de fallas e interlocks activos. |
 | `alarms.overflow_a` | Boolean | - | `true` \| `false` | Alarma de sobrellenado en Tanque A ($> 95\%$). Provoca corte de bomba. |
 | `alarms.overflow_b` | Boolean | - | `true` \| `false` | Alarma de sobrellenado en Tanque B ($> 95\%$). Provoca corte de bomba. |
-| `alarms.sensor_fault`| Boolean | - | `true` \| `false` | Fallo de lectura o desconexión física de alguno de los sensores. |
+| `alarms.sensor_fault`| Boolean | - | `true` \| `false` | Fallo de las **celdas de carga** (HX711 no listo, valor crudo saturado o peso implausible) que impide vigilar el nivel. **No incluye la temperatura ni el caudal**: una falla del DS18B20 solo se informa con `temp_c: null`. |
+| `alarms.pump_timeout`| Boolean | - | `true` \| `false` | Corte preventivo de bomba por tiempo continuo máximo superado (watchdog 60 s). |
 | `mode` | String | - | `"auto"` \| `"manual"` | Modo de operación actual reportado por la lógica de control. |
 
 ---
@@ -144,7 +146,10 @@ Si un interlock de seguridad está activo (por ejemplo, el Tanque A o Tanque B s
 
 - `"overflow_a"`: Intento de encender la bomba cuando el nivel del Tanque A supera el umbral crítico ($>95\%$).
 - `"overflow_b"`: Intento de encender la bomba cuando el nivel del Tanque B supera el umbral crítico ($>95\%$).
-- `"sensor_fault"`: Interlock por fallo o lectura espuria de sensores de nivel.
+- `"sensor_fault"`: Interlock por fallo o lectura espuria de las celdas de carga (nivel). La temperatura no interviene: con el DS18B20 caído el encendido no se rechaza por este motivo.
+- `"not_calibrated"`: Intento de encender la bomba mientras el firmware no tiene calibración confiable (EEPROM válida, o tara, escala y capacidad de ambos tanques fijadas en la sesión). Lo emite el Arduino; el bridge lo reenvía sin cambios, el backend lo responde como `409 Conflict` con `reason: "not_calibrated"` y la SPA lo muestra como mensaje de interlock. El apagado nunca se rechaza por este motivo.
+- `"sensor_not_ready"`: Respuesta a `tare` cuando alguna de las 10 muestras promediadas del HX711 no está lista dentro de 2 s o está saturada; no cambia la tara. No es un rechazo de bomba.
+- `"pump_on"`: Respuesta a `tare` cuando la bomba está encendida. Se chequea antes de leer el HX711 y no cambia la tara. No es un rechazo de bomba; apagar la bomba y reintentar.
 - `"unknown_target"`: El actuador especificado en `target` no existe o no está registrado.
 - `"invalid_command"`: Estructura de trama JSON no válida o comando no soportado.
 - `"invalid_value"`: El valor suministrado no coincide con el tipo esperado por el actuador.

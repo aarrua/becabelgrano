@@ -21,7 +21,7 @@ public record TelemetryFrame(
         TankTelemetry tank_b,
 
         @Schema(description = "Caudal medido en litros por minuto (L/min)", example = "1.8")
-        double flow_lpm,
+        Double flow_lpm,
 
         @Schema(description = "Mapa de estado de actuadores físicos")
         Map<String, Boolean> actuators,

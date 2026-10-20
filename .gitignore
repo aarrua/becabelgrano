@@ -92,3 +92,8 @@ logs/
 ayuda.md
 probar-e2e.ps1
 *.local.md
+prompt-*.md
+salida.md
+prompt-*.md
+claude/
+prompt.md

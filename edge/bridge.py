@@ -132,25 +132,36 @@ def format_influx_line(data: Dict[str, Any], timestamp_ns: Optional[int] = None)
 
         tank_a = data["tank_a"]
         tank_b = data["tank_b"]
-        flow_lpm = float(data.get("flow_lpm", 0.0))
         actuators = data.get("actuators", {})
         alarms = data.get("alarms", {})
 
         fields = [
             f"seq={seq}i",
             f"uptime_ms={uptime_ms}i",
-            f"tank_a_weight_g={float(tank_a['weight_g']):.2f}",
-            f"tank_a_level_pct={float(tank_a['level_pct']):.2f}",
-            f"tank_a_temp_c={float(tank_a['temp_c']):.2f}",
-            f"tank_b_weight_g={float(tank_b['weight_g']):.2f}",
-            f"tank_b_level_pct={float(tank_b['level_pct']):.2f}",
-            f"tank_b_temp_c={float(tank_b['temp_c']):.2f}",
-            f"flow_lpm={flow_lpm:.2f}",
-            f"pump={'true' if actuators.get('pump', False) else 'false'}",
-            f"overflow_a={'true' if alarms.get('overflow_a', False) else 'false'}",
-            f"overflow_b={'true' if alarms.get('overflow_b', False) else 'false'}",
-            f"sensor_fault={'true' if alarms.get('sensor_fault', False) else 'false'}",
         ]
+
+        if tank_a.get("weight_g") is not None:
+            fields.append(f"tank_a_weight_g={float(tank_a['weight_g']):.2f}")
+        if tank_a.get("level_pct") is not None:
+            fields.append(f"tank_a_level_pct={float(tank_a['level_pct']):.2f}")
+        if tank_a.get("temp_c") is not None:
+            fields.append(f"tank_a_temp_c={float(tank_a['temp_c']):.2f}")
+
+        if tank_b.get("weight_g") is not None:
+            fields.append(f"tank_b_weight_g={float(tank_b['weight_g']):.2f}")
+        if tank_b.get("level_pct") is not None:
+            fields.append(f"tank_b_level_pct={float(tank_b['level_pct']):.2f}")
+        if tank_b.get("temp_c") is not None:
+            fields.append(f"tank_b_temp_c={float(tank_b['temp_c']):.2f}")
+
+        if data.get("flow_lpm") is not None:
+            fields.append(f"flow_lpm={float(data['flow_lpm']):.2f}")
+
+        fields.append(f"pump={'true' if actuators.get('pump', False) else 'false'}")
+        fields.append(f"overflow_a={'true' if alarms.get('overflow_a', False) else 'false'}")
+        fields.append(f"overflow_b={'true' if alarms.get('overflow_b', False) else 'false'}")
+        fields.append(f"sensor_fault={'true' if alarms.get('sensor_fault', False) else 'false'}")
+        fields.append(f"pump_timeout={'true' if alarms.get('pump_timeout', False) else 'false'}")
 
         if timestamp_ns is not None:
             line = f"telemetry,mode={mode} {','.join(fields)} {timestamp_ns}"
@@ -472,15 +483,34 @@ class TanquesBridge:
             self.telemetry_success_count += 1
             if self.log_interval > 0 and self.telemetry_success_count % self.log_interval == 0:
                 iso_time = datetime.now(timezone.utc).isoformat()
+                tank_a = data.get("tank_a") if isinstance(data.get("tank_a"), dict) else {}
+                tank_b = data.get("tank_b") if isinstance(data.get("tank_b"), dict) else {}
+                actuators = data.get("actuators") if isinstance(data.get("actuators"), dict) else {}
+
+                seq_val = data.get("seq")
+                seq_str = str(seq_val) if seq_val is not None else "s/d"
+
+                lvl_a = tank_a.get("level_pct")
+                lvl_a_str = f"{float(lvl_a):.1f}%" if lvl_a is not None else "s/d"
+
+                lvl_b = tank_b.get("level_pct")
+                lvl_b_str = f"{float(lvl_b):.1f}%" if lvl_b is not None else "s/d"
+
+                pump_val = actuators.get("pump")
+                pump_str = str(pump_val) if pump_val is not None else "s/d"
+
+                flow_val = data.get("flow_lpm")
+                flow_str = f"{float(flow_val):.2f} L/min" if flow_val is not None else "s/d"
+
                 logger.info(
-                    "[%s] InfluxDB: %d escrituras exitosas acumuladas (última seq=%d | A: %s%% | B: %s%% | Bomba: %s | Q: %.2f L/min)",
+                    "[%s] InfluxDB: %d escrituras exitosas acumuladas (última seq=%s | A: %s | B: %s | Bomba: %s | Q: %s)",
                     iso_time,
                     self.telemetry_success_count,
-                    data.get("seq", 0),
-                    data.get("tank_a", {}).get("level_pct"),
-                    data.get("tank_b", {}).get("level_pct"),
-                    data.get("actuators", {}).get("pump"),
-                    data.get("flow_lpm", 0.0)
+                    seq_str,
+                    lvl_a_str,
+                    lvl_b_str,
+                    pump_str,
+                    flow_str
                 )
 
 

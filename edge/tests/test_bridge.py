@@ -378,3 +378,124 @@ def test_influx_writer_raises_when_token_empty() -> None:
         InfluxWriter(url="http://localhost:8086", token="", org="utn-frsf", bucket="tanques")
 
 
+def test_format_influx_line_with_null_sensors() -> None:
+    """13. Tramas con valores nulos (MODO_SIM_SIN_SENSORES o sensor_fault) se formatean correctamente."""
+    trama = {
+        "v": 1,
+        "seq": 42,
+        "uptime_ms": 12000,
+        "tank_a": {"weight_g": None, "level_pct": None, "temp_c": None},
+        "tank_b": {"weight_g": None, "level_pct": None, "temp_c": None},
+        "flow_lpm": None,
+        "actuators": {"pump": True},
+        "alarms": {"overflow_a": False, "overflow_b": False, "sensor_fault": True},
+        "mode": "auto"
+    }
+    line = format_influx_line(trama)
+    assert line is not None
+    assert line.startswith("telemetry,mode=auto")
+    assert "seq=42i" in line
+    assert "uptime_ms=12000i" in line
+    assert "pump=true" in line
+    assert "sensor_fault=true" in line
+    assert "tank_a_weight_g" not in line
+
+
+def test_process_device_line_with_null_sensors_logging(caplog: pytest.LogCaptureFixture) -> None:
+    """14. Tramas con sensores o actuadores en null no fallan en los logs periódicos del bridge."""
+    import logging
+    mock_writer = MagicMock()
+    mock_writer.write_line_protocol.return_value = True
+
+    bridge = TanquesBridge(
+        influx_writer=mock_writer,
+        log_interval=1  # Loggea en cada trama exitosa
+    )
+
+    trama_uno_sin_sensores = {
+        "v": 1,
+        "seq": 1,
+        "uptime_ms": 1050,
+        "tank_a": {"level_pct": None, "weight_g": None, "temp_c": None},
+        "tank_b": {"level_pct": None, "weight_g": None, "temp_c": None},
+        "flow_lpm": None,
+        "actuators": {"pump": False},
+        "alarms": {"tank_a_sensor_fault": True, "tank_b_sensor_fault": True, "temp_sensor_fault": True, "leak_detected": False}
+    }
+
+    trama_con_nulos_y_pump_nula = {
+        "v": 1,
+        "seq": 2,
+        "uptime_ms": 2100,
+        "tank_a": {"level_pct": None, "weight_g": None, "temp_c": None},
+        "tank_b": {"level_pct": None, "weight_g": None, "temp_c": None},
+        "flow_lpm": None,
+        "actuators": {"pump": None},
+        "alarms": {"sensor_fault": True}
+    }
+
+    with caplog.at_level(logging.INFO, logger="edge-bridge"):
+        # Trama 1: Modo sin sensores típico de Arduino Uno
+        bridge.process_device_line(json.dumps(trama_uno_sin_sensores))
+        assert bridge.telemetry_success_count == 1
+        assert "A: s/d" in caplog.text
+        assert "B: s/d" in caplog.text
+        assert "Q: s/d" in caplog.text
+        assert "Bomba: False" in caplog.text
+        assert "seq=1" in caplog.text
+
+        # Trama 2: Sensores y bomba en null
+        bridge.process_device_line(json.dumps(trama_con_nulos_y_pump_nula))
+        assert bridge.telemetry_success_count == 2
+        assert "seq=2" in caplog.text
+        assert "Bomba: s/d" in caplog.text
+
+
+
+
+@pytest.mark.parametrize("cmd", [
+    {"id": "cal-tare-a", "cmd": "tare", "tank": "a"},
+    {"id": "cal-scale-a", "cmd": "cal_scale", "tank": "a", "scale": 415.8},
+    {"id": "cal-reset", "cmd": "reset_cal"},
+    {"id": "cal-save", "cmd": "save_cal"},
+    {"id": "cal-cap-a", "cmd": "set_capacity", "tank": "a", "grams": 4000.0},
+    {"id": "cal-cap-b", "cmd": "set_capacity", "tank": "b", "grams": 2450.0},
+    {"id": "cal-flow", "cmd": "cal_flow", "pulses_per_l": 450.0},
+])
+def test_calibration_commands_pass_through_to_serial(bridge: TanquesBridge, cmd: Dict[str, Any]) -> None:
+    """Los comandos de calibracion (tare, cal_scale, set_capacity, cal_flow, reset_cal, save_cal) con id se reenvian tal cual al serial."""
+    bridge.handle_incoming_command(json.dumps(cmd))
+
+    assert not bridge.command_queue.empty()
+    assert json.loads(bridge.command_queue.get_nowait()) == cmd
+
+
+def test_calibration_command_without_id_is_discarded(bridge: TanquesBridge) -> None:
+    """Un comando de calibracion sin id se descarta y no llega al serial."""
+    bridge.handle_incoming_command(json.dumps({"cmd": "save_cal"}))
+
+    assert bridge.command_queue.empty()
+
+
+def test_calibration_ack_with_firmware_reason_is_published(bridge: TanquesBridge, fake_mqtt: FakeMqttClient) -> None:
+    """El rechazo del firmware por rango invalido (invalid_capacity) llega a tanques/ack con su motivo."""
+    cmd = {"id": "cal-cap-bad", "cmd": "set_capacity", "tank": "a", "grams": 99999}
+    bridge.handle_incoming_command(json.dumps(cmd))
+    assert json.loads(bridge.command_queue.get_nowait()) == cmd
+
+    bridge.process_device_line(json.dumps({"ack": "cal-cap-bad", "ok": False, "reason": "invalid_capacity"}))
+
+    acks = [m for m in fake_mqtt.published_messages if m["topic"] == "tanques/ack"]
+    assert acks[-1]["payload"] == {"ack": "cal-cap-bad", "ok": False, "reason": "invalid_capacity"}
+
+
+def test_not_calibrated_rejection_ack_is_published(bridge: TanquesBridge, fake_mqtt: FakeMqttClient) -> None:
+    """El rechazo del firmware con reason not_calibrated llega a tanques/ack sin alteraciones."""
+    cmd = {"id": "c_nocal", "cmd": "set", "target": "pump", "value": True}
+    bridge.handle_incoming_command(json.dumps(cmd))
+    assert json.loads(bridge.command_queue.get_nowait()) == cmd
+
+    bridge.process_device_line(json.dumps({"ack": "c_nocal", "ok": False, "reason": "not_calibrated"}))
+
+    acks = [m for m in fake_mqtt.published_messages if m["topic"] == "tanques/ack"]
+    assert acks[-1]["payload"] == {"ack": "c_nocal", "ok": False, "reason": "not_calibrated"}

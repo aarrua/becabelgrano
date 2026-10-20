@@ -61,6 +61,9 @@ class SimulatorState:
     flow_noise_lpm: float
     temp_noise_c: float
 
+    # Histéresis del interlock: la bandera de sobrellenado se rearma recién bajo este nivel
+    overflow_rearm_pct: float = 80.0
+
     # Variables de operación y estado
     actuators: Dict[str, bool] = field(default_factory=lambda: {"pump": False})
     alarms: Dict[str, bool] = field(default_factory=lambda: {
@@ -107,6 +110,7 @@ DEFAULT_CONFIG: Dict[str, Any] = {
     },
     "interlocks": {
         "overflow_threshold_pct": 85.0,
+        "overflow_rearm_pct": 80.0,
     },
     "noise": {
         "weight_noise_g": 1.2,
@@ -178,6 +182,22 @@ def load_config(config_path: Optional[Union[Path, str]]) -> Dict[str, Any]:
 # Lógica Física de Simulación
 # ==============================================================================
 
+def update_overflow_flag(active: bool, level_pct: float, threshold_pct: float, rearm_pct: float) -> bool:
+    """Histéresis del interlock de sobrellenado (paridad con el firmware).
+
+    Se activa al llegar a threshold_pct y solo se desactiva bajo rearm_pct; entre
+    ambos valores conserva el estado previo. Un nivel inválido (NaN) deja la bandera
+    activa. rearm_pct se acota a threshold_pct para que la histéresis nunca sea negativa.
+    """
+    if not level_pct == level_pct:  # NaN
+        return True
+    if level_pct >= threshold_pct:
+        return True
+    if level_pct < min(rearm_pct, threshold_pct):
+        return False
+    return active
+
+
 def step_physics(state: SimulatorState, dt: float) -> float:
     """
     Avanza la física del sistema dt segundos.
@@ -223,8 +243,13 @@ def step_physics(state: SimulatorState, dt: float) -> float:
         pct_a = state.tank_a.level_pct
         pct_b = state.tank_b.level_pct
 
-        overflow_a = pct_a >= state.overflow_threshold_pct
-        overflow_b = pct_b >= state.overflow_threshold_pct
+        # Histéresis: se activa al llegar al umbral y solo se rearma bajo overflow_rearm_pct
+        overflow_a = update_overflow_flag(
+            state.alarms.get("overflow_a", False), pct_a,
+            state.overflow_threshold_pct, state.overflow_rearm_pct)
+        overflow_b = update_overflow_flag(
+            state.alarms.get("overflow_b", False), pct_b,
+            state.overflow_threshold_pct, state.overflow_rearm_pct)
 
         state.alarms["overflow_a"] = overflow_a
         state.alarms["overflow_b"] = overflow_b
@@ -425,6 +450,7 @@ def main() -> None:
         ambient_temp_c=float(th_cfg["ambient_temp_c"]),
         thermal_tau_s=float(th_cfg["tau_seconds"]),
         overflow_threshold_pct=float(int_cfg["overflow_threshold_pct"]),
+        overflow_rearm_pct=float(int_cfg.get("overflow_rearm_pct", 80.0)),
         weight_noise_g=float(noise_cfg["weight_noise_g"]),
         flow_noise_lpm=float(noise_cfg["flow_noise_lpm"]),
         temp_noise_c=float(noise_cfg["temp_noise_c"]),

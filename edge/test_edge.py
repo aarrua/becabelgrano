@@ -4,6 +4,7 @@ Pruebas Automatizadas de Validación para edge/simulator.py y edge/bridge.py (Fa
 """
 
 import json
+import sys
 from pathlib import Path
 import time
 import unittest
@@ -18,6 +19,7 @@ from edge.bridge import (
     stream_simulator,
 )
 from edge.simulator import (
+    update_overflow_flag,
     SimulatorState,
     TankState,
     build_telemetry_frame,
@@ -122,6 +124,58 @@ class TestSimulatorPhysics(unittest.TestCase):
         self.assertFalse(resp["ok"])
         self.assertEqual(resp["reason"], "overflow_a")
         self.assertFalse(self.state.actuators["pump"])
+
+    def test_overflow_hysteresis_holds_between_rearm_and_threshold(self):
+        self.state.overflow_threshold_pct = 85.0
+        self.state.overflow_rearm_pct = 80.0
+        self.state.actuators["pump"] = False
+        vol_max = self.state.tank_a.volume_max_ml
+
+        self.state.tank_a.volume_ml = vol_max * 0.86
+        step_physics(self.state, dt=0.0)
+        self.assertTrue(self.state.alarms["overflow_a"])
+
+        # Entre 80 y 85 % la bandera se mantiene activa
+        self.state.tank_a.volume_ml = vol_max * 0.82
+        step_physics(self.state, dt=0.0)
+        self.assertTrue(self.state.alarms["overflow_a"])
+
+        # Bajo 80 % se rearma
+        self.state.tank_a.volume_ml = vol_max * 0.79
+        step_physics(self.state, dt=0.0)
+        self.assertFalse(self.state.alarms["overflow_a"])
+
+        # Y entre 80 y 85 % subiendo no se activa hasta alcanzar el umbral
+        self.state.tank_a.volume_ml = vol_max * 0.83
+        step_physics(self.state, dt=0.0)
+        self.assertFalse(self.state.alarms["overflow_a"])
+
+    def test_pump_command_rejected_while_flag_latched_between_80_and_85(self):
+        self.state.overflow_threshold_pct = 85.0
+        self.state.overflow_rearm_pct = 80.0
+        self.state.actuators["pump"] = False
+        self.state.alarms["overflow_b"] = True
+        self.state.tank_b.volume_ml = self.state.tank_b.volume_max_ml * 0.82
+        step_physics(self.state, dt=0.0)
+
+        import io
+        captured = io.StringIO()
+        old_stdout = sys.stdout
+        try:
+            sys.stdout = captured
+            process_command(self.state, json.dumps(
+                {"id": "cmd_h", "cmd": "set", "target": "pump", "value": True}))
+        finally:
+            sys.stdout = old_stdout
+        resp = json.loads(captured.getvalue().strip())
+        self.assertFalse(resp["ok"])
+        self.assertEqual(resp["reason"], "overflow_b")
+
+    def test_update_overflow_flag_invalid_level_latches_true(self):
+        self.assertTrue(update_overflow_flag(False, float("nan"), 85.0, 80.0))
+        self.assertFalse(update_overflow_flag(True, 50.0, 85.0, 90.0))  # rearm acotado al umbral
+        self.assertTrue(update_overflow_flag(True, 84.0, 85.0, 80.0))
+        self.assertFalse(update_overflow_flag(True, 79.9, 85.0, 80.0))
 
 
 class TestBridgeFormatting(unittest.TestCase):

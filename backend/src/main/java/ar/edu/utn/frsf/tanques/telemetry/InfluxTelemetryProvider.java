@@ -142,18 +142,18 @@ public class InfluxTelemetryProvider implements TelemetryProvider {
         long uptimeMs = parseLong(fields.get("uptime_ms"), 0L);
 
         TankTelemetry tankA = new TankTelemetry(
-                parseDouble(fields.get("tank_a_weight_g"), 0.0),
-                parseDouble(fields.get("tank_a_level_pct"), 0.0),
-                parseDouble(fields.get("tank_a_temp_c"), 0.0)
+                parseNullableDouble(fields.get("tank_a_weight_g")),
+                parseNullableDouble(fields.get("tank_a_level_pct")),
+                parseNullableDouble(fields.get("tank_a_temp_c"))
         );
 
         TankTelemetry tankB = new TankTelemetry(
-                parseDouble(fields.get("tank_b_weight_g"), 0.0),
-                parseDouble(fields.get("tank_b_level_pct"), 0.0),
-                parseDouble(fields.get("tank_b_temp_c"), 0.0)
+                parseNullableDouble(fields.get("tank_b_weight_g")),
+                parseNullableDouble(fields.get("tank_b_level_pct")),
+                parseNullableDouble(fields.get("tank_b_temp_c"))
         );
 
-        double flowLpm = parseDouble(fields.get("flow_lpm"), 0.0);
+        Double flowLpm = parseNullableDouble(fields.get("flow_lpm"));
 
         boolean fresh = hasRecords
                 && Math.abs(java.time.Duration.between(newestRecordTime, Instant.now()).toMillis()) <= 5000;
@@ -169,8 +169,18 @@ public class InfluxTelemetryProvider implements TelemetryProvider {
         alarms.put("overflow_a", parseBoolean(fields.get("overflow_a")));
         alarms.put("overflow_b", parseBoolean(fields.get("overflow_b")));
         alarms.put("sensor_fault", !hasRecords || parseBoolean(fields.get("sensor_fault")));
+        alarms.put("pump_timeout", parseBoolean(fields.get("pump_timeout")));
 
         return new TelemetryFrame(1, seq, uptimeMs, tankA, tankB, flowLpm, actuators, alarms, mode);
+    }
+
+    private Double parseNullableDouble(Object val) {
+        if (val == null) return null;
+        if (val instanceof Number n) return n.doubleValue();
+        if (val instanceof String s) {
+            try { return Double.parseDouble(s); } catch (NumberFormatException ignored) {}
+        }
+        return null;
     }
 
     private double parseDouble(Object val, double fallback) {

@@ -33,6 +33,7 @@ tanques:
       volume-max-ml: 2450.0
   interlocks:
     overflow-threshold-pct: 85.0
+    overflow-rearm-pct: 80.0
   mqtt:
     host: ${MQTT_HOST:localhost}
     port: ${MQTT_PORT:1883}

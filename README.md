@@ -81,7 +81,7 @@ graph TD
 | **Fase 1** | Simulador físico de tanques, bridge serial, InfluxDB, Grafana y nginx | **Completada** |
 | **Fase 2** | Backend Spring Boot (JWT, roles DOCENTE/ALUMNO, ActuatorGateway, auditoría H2) | **Completada** |
 | **Fase 3** | Frontend React SPA (Monitoreo, paneles Grafana embebidos, control seguro por roles) | **Completada** |
-| **Fase 4** | Puesta en marcha integral, integración en producción, bridge bidireccional y firmware | **En curso (Etapas 1, 2 y 3 completadas)** |
+| **Fase 4** | Puesta en marcha integral, integración en producción, bridge bidireccional y firmware | **En curso (Etapas 1 a 6 completadas; pendientes que dependen del hardware)** |
 
 Consultá el detalle de cambios históricos en el [CHANGELOG.md](file:///c:/Users/Ale/OneDrive%20-%20UTN%20-%20Santa%20Fe/UTN%202025/Beca%20Belgrano/becabelgrano/CHANGELOG.md).
 
@@ -170,8 +170,9 @@ npm run dev
 │   ├── 01-contrato-datos.md   # Especificación de telemetría y tramas seriales
 │   ├── 02-flujo-comandos.md   # Diagramas de secuencia y mecanismos de seguridad
 │   ├── 03-api.md              # Documentación de endpoints REST y OpenAPI
+│   ├── 04-hardware.md         # Especificación de hardware y mapa de pines Arduino Uno
 │   └── 05-verificacion-e2e.md # Guía paso a paso de verificación integral E2E en producción
-├── firmware/        # Especificación y código para Arduino Uno
+├── firmware/        # Código fuente para Arduino Uno (firmware/tanques/)
 ├── edge/            # Scripts Python para Raspberry Pi (simulador físico y bridge serial)
 ├── backend/         # Backend REST en Spring Boot 3.5.x (Java 21, Maven, JWT, H2)
 ├── infra/           # Orquestación con Docker Compose (InfluxDB, Grafana, nginx)

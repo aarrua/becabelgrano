@@ -3,11 +3,12 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { sendActuatorCommand } from '../api/actuators'
 import { useAuth } from '../context/AuthContext'
 import { PumpIcon, FlowIcon, LockIcon, AlertTriangleIcon, CheckCircleIcon } from './Icons'
+import { OVERFLOW_THRESHOLD_PCT } from '../config/interlock'
 import { ApiError } from '../types/telemetry'
 
 interface PumpControlProps {
   currentPumpState: boolean | null
-  flowLpm?: number
+  flowLpm?: number | null
   isInterlockBlocked?: boolean
   interlockReason?: string
   isTelemetryStale?: boolean
@@ -19,20 +20,26 @@ function mapInterlockReason(reason?: string): string {
     return 'Encendido bloqueado: telemetría desactualizada (> 5 s) y estado no verificado'
   }
   if (reason.toLowerCase().includes('overflow_a')) {
-    return 'Interlock de sobrellenado activo: Nivel crítico en Tanque A (> 85%)'
+    return `Interlock de sobrellenado activo: Nivel crítico en Tanque A (> ${OVERFLOW_THRESHOLD_PCT}%)`
   }
   if (reason.toLowerCase().includes('overflow_b')) {
-    return 'Interlock de sobrellenado activo: Nivel crítico en Tanque B (> 85%)'
+    return `Interlock de sobrellenado activo: Nivel crítico en Tanque B (> ${OVERFLOW_THRESHOLD_PCT}%)`
   }
   if (reason.toLowerCase().includes('sensor_fault')) {
-    return 'Interlock de seguridad activo: Falla o desconexión en sensores'
+    return 'Interlock de seguridad activo: Falla o desconexión en las celdas de carga (nivel)'
+  }
+  if (reason.toLowerCase().includes('not_calibrated')) {
+    return 'Encendido bloqueado: el equipo no está calibrado (tara, escala y capacidad de ambos tanques)'
+  }
+  if (reason.toLowerCase().includes('pump_timeout')) {
+    return 'Alarma activa: Bomba apagada por exceder tiempo máximo continuo (Watchdog 60 s)'
   }
   return `Comando rechazado por interlock: ${reason}`
 }
 
 export function PumpControl({
   currentPumpState,
-  flowLpm = 0,
+  flowLpm,
   isInterlockBlocked = false,
   interlockReason,
   isTelemetryStale = false,
@@ -111,8 +118,8 @@ export function PumpControl({
           <div className="pump-flow-badge" title="Caudal medido en la impulsión">
             <FlowIcon width="16" height="16" />
             <span className="flow-badge-label">Caudal de entrada:</span>
-            <span className="flow-badge-val">{flowLpm.toFixed(2)}</span>
-            <span className="flow-badge-unit">L/min</span>
+            <span className="flow-badge-val">{flowLpm != null ? flowLpm.toFixed(2) : '--'}</span>
+            <span className="flow-badge-unit">{flowLpm != null ? 'L/min' : ''}</span>
           </div>
 
           <span
@@ -145,7 +152,7 @@ export function PumpControl({
             <div className="alert-interlock-warning">
               <AlertTriangleIcon width="16" height="16" />
               <span>
-                {interlockReason ? mapInterlockReason(interlockReason) : 'Interlock de sobrellenado activo (> 85%). Encendido bloqueado.'}
+                {interlockReason ? mapInterlockReason(interlockReason) : `Interlock de sobrellenado activo (> ${OVERFLOW_THRESHOLD_PCT}%). Encendido bloqueado.`}
               </span>
             </div>
           )}

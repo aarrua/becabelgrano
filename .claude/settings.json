@@ -1,0 +1,32 @@
+{
+    "permissions": {
+        "defaultMode": "acceptEdits",
+        "allow": [
+            "Bash(python -m pytest *)",
+            "Bash(mvn test *)",
+            "Bash(npm run build *)",
+            "Bash(arduino-cli compile *)",
+            "Bash(git add *)",
+            "Bash(git commit *)",
+            "PowerShell(python -m pytest *)",
+            "PowerShell(mvn test *)",
+            "PowerShell(npm run build *)",
+            "PowerShell(arduino-cli compile *)",
+            "PowerShell(git add *)",
+            "PowerShell(git commit *)"
+        ],
+        "deny": [
+            "Read(**/.env)",
+            "Read(infra/mosquitto/passwords)",
+            "Bash(git push *)",
+            "Bash(git merge *)",
+            "Bash(git reset --hard *)",
+            "Bash(arduino-cli upload *)",
+            "PowerShell(git push *)",
+            "PowerShell(git merge *)",
+            "PowerShell(git reset --hard *)",
+            "PowerShell(Remove-Item *)",
+            "PowerShell(arduino-cli upload *)"
+        ]
+    }
+}

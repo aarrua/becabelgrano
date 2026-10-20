@@ -229,11 +229,11 @@ python edge/tools/send_cmd.py cmd-002 true --host localhost --port 1883
 
 ### 6.3 Con Microcontrolador Físico
 ```bash
-# En Windows:
-python edge/bridge.py --source serial:COM5:115200
+# En Windows (la velocidad 115200 bps es por defecto, no hace falta indicarla):
+python edge/bridge.py --source serial:COM5
 
 # En Linux:
-python edge/bridge.py --source serial:/dev/ttyACM0:115200
+python edge/bridge.py --source serial:/dev/ttyACM0
 ```
 
 ### 6.4 Suite Completa de Tests Automatizados

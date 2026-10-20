@@ -69,10 +69,28 @@ public class MockTelemetryProvider implements TelemetryProvider {
         double levelPctA = (volA / maxVolA) * 100.0;
         double levelPctB = (volB / maxVolB) * 100.0;
 
-        // Evaluación de interlocks configurable (default 85%)
+        // Evaluación de interlocks con histéresis (corte default 85%, rearme bajo 80%)
+        Map<String, Boolean> alarms = actuatorGateway.getSimulatedAlarms();
+        actuatorGateway.setSimulatedAlarm("overflow_a",
+                nextOverflowState(alarms.get("overflow_a"), levelPctA));
+        actuatorGateway.setSimulatedAlarm("overflow_b",
+                nextOverflowState(alarms.get("overflow_b"), levelPctB));
+    }
+
+    /**
+     * Se activa al llegar al umbral y solo se desactiva bajo el nivel de rearme; entre ambos
+     * conserva el estado previo. Un nivel inválido (NaN) deja la bandera activa.
+     */
+    private boolean nextOverflowState(Boolean active, double levelPct) {
         double threshold = interlockConfig.getOverflowThresholdPct();
-        actuatorGateway.setSimulatedAlarm("overflow_a", levelPctA >= threshold);
-        actuatorGateway.setSimulatedAlarm("overflow_b", levelPctB >= threshold);
+        double rearm = Math.min(interlockConfig.getOverflowRearmPct(), threshold);
+        if (Double.isNaN(levelPct) || levelPct >= threshold) {
+            return true;
+        }
+        if (levelPct < rearm) {
+            return false;
+        }
+        return Boolean.TRUE.equals(active);
     }
 
     @Override

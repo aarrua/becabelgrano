@@ -122,6 +122,34 @@ class BridgeActuatorGatewayTest {
     }
 
     @Test
+    void testExecuteCommandNotCalibratedRejection() throws Exception {
+        doAnswer(invocation -> {
+            MqttMessage msg = invocation.getArgument(1);
+            BridgeCommandMessage cmd = objectMapper.readValue(msg.getPayload(), BridgeCommandMessage.class);
+
+            Executors.newSingleThreadScheduledExecutor().schedule(() -> {
+                try {
+                    String ackJson = "{\"ack\":\"" + cmd.id() + "\",\"ok\":false,\"reason\":\"not_calibrated\"}";
+                    gateway.messageArrived(ackTopic, new MqttMessage(ackJson.getBytes()));
+                } catch (Exception ignored) {
+                }
+            }, 20, TimeUnit.MILLISECONDS);
+
+            return null;
+        }).when(mqttClient).publish(eq(cmdTopic), any(MqttMessage.class));
+
+        InterlockViolationException ex = assertThrows(InterlockViolationException.class,
+                () -> gateway.executeCommand("pump", true, "docente"));
+
+        assertEquals("pump", ex.getTarget());
+        assertTrue(ex.isRequestedValue());
+        assertEquals("not_calibrated", ex.getReason());
+
+        verify(auditService).recordCommand("docente", "pump", true, false, "not_calibrated");
+        assertEquals(0, gateway.getPendingAcksCount());
+    }
+
+    @Test
     void testExecuteCommandExpiredRejection() throws Exception {
         doAnswer(invocation -> {
             MqttMessage msg = invocation.getArgument(1);
