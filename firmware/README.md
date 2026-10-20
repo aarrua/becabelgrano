@@ -16,7 +16,32 @@ Este directorio contiene la especificación y el código fuente del firmware par
 
 ---
 
-## 2. Compilación y Carga con Arduino CLI
+## 2. Entorno, Core AVR y Librerías Aprobadas
+
+### 2.1 Core de Microcontrolador
+- **Core AVR**: `arduino:avr` versión `1.8.8` (Arduino AVR Boards).
+```powershell
+arduino-cli core install arduino:avr@1.8.8
+```
+
+### 2.2 Librerías Homologadas y Versiones Fijadas
+Para garantizar determinismo en el consumo de RAM/Flash y compatibilidad binaria, se fijan las siguientes versiones aprobadas:
+- **HX711**: `0.7.5` (`HX711 Arduino Library` de Bogdan Necula / Rob Tillaart)
+- **OneWire**: `2.3.8` (de Paul Stoffregen / Jim Studt)
+- **DallasTemperature**: `4.0.6` (de Miles Burton)
+- **Adafruit NeoPixel**: `1.15.5` (de Adafruit)
+
+Comandos exactos de instalación con `arduino-cli`:
+```powershell
+arduino-cli lib install "HX711 Arduino Library@0.7.5"
+arduino-cli lib install "OneWire@2.3.8"
+arduino-cli lib install "DallasTemperature@4.0.6"
+arduino-cli lib install "Adafruit NeoPixel@1.15.5"
+```
+
+---
+
+## 3. Compilación y Carga con Arduino CLI
 
 Para compilar el sketch para Arduino Uno:
 ```powershell
@@ -30,7 +55,7 @@ Para subir el firmware al Arduino Uno (por ejemplo en el puerto `COM5`):
 
 ---
 
-## 1. Responsabilidades del Arduino Uno
+## 4. Responsabilidades del Arduino Uno
 
 1. **Lectura de sensores (frecuencia ~1 Hz)**:
    - Celda de carga / peso de Tanque A (`weight_g`) y cálculo de nivel (`level_pct`).
@@ -50,7 +75,7 @@ Para subir el firmware al Arduino Uno (por ejemplo en el puerto `COM5`):
 
 ---
 
-## 2. Parámetros de Comunicación Serial
+## 5. Parámetros de Comunicación Serial
 
 - **Baudrate**: `115200`
 - **Data bits**: `8`
@@ -61,9 +86,9 @@ Para subir el firmware al Arduino Uno (por ejemplo en el puerto `COM5`):
 
 ---
 
-## 3. Contrato de Datos
+## 6. Contrato de Datos y Procesamiento de Comandos
 
-### 3.1 Telemetría (Arduino Uno $\to$ Raspberry Pi)
+### 6.1 Telemetría (Arduino Uno $\to$ Raspberry Pi)
 
 Cada segundo se envía una trama JSON en una única línea terminada en salto de línea (`\n`):
 
@@ -95,27 +120,69 @@ Cada segundo se envía una trama JSON en una única línea terminada en salto de
 }
 ```
 
-### 3.2 Comandos de Control (Raspberry Pi $\to$ Arduino Uno)
+### 6.2 Comandos de Control (Raspberry Pi $\to$ Arduino Uno)
 
 ```json
 {"id": "c1", "cmd": "set", "target": "pump", "value": true}
 ```
 
-### 3.3 Confirmación / Rechazo de Comando (Arduino Uno $\to$ Raspberry Pi)
+### 6.3 Manejo de Campos Faltantes y Claves Adicionales (`ts`)
 
+El parser de comandos implementado en `protocolo.cpp` opera con buffers estáticos sin memoria dinámica:
+1. **Claves adicionales o ignoradas (ej. `"ts"`)**:
+   El backend y el bridge pueden inyectar un campo `"ts"` (timestamp en epoch ms). Dado que el Arduino Uno no dispone de RTC de hardware, la expiración temporal del comando es validada previamente en el borde por `edge/bridge.py`. El firmware busca únicamente las claves necesarias (`"id"`, `"cmd"`, `"target"`, `"value"`) e ignora en silencio cualquier campo adicional como `"ts"`, procesando el comando normalmente.
+2. **Campos faltantes o inválidos**:
+   - **Falta `"id"`**: Si el JSON carece de la clave `"id"` identificable, el firmware responde con id comodín:
+     ```json
+     {"ack":"?","ok":false,"reason":"unknown_cmd"}
+     ```
+   - **Falta `"cmd"` o comando desconocido**: Si `"cmd"` falta o no es `"set"`:
+     ```json
+     {"ack":"<id>","ok":false,"reason":"unknown_cmd"}
+     ```
+   - **Falta `"target"` o actuador no soportado**: Si `"target"` falta o no es `"pump"`:
+     ```json
+     {"ack":"<id>","ok":false,"reason":"unknown_cmd"}
+     ```
+   - **Falta `"value"` o valor no booleano**: Si `"value"` falta o no coincide con los literales `true` o `false`:
+     ```json
+     {"ack":"<id>","ok":false,"reason":"malformed_cmd"}
+     ```
+
+### 6.4 Confirmación / Rechazo de Comando (Arduino Uno $\to$ Raspberry Pi)
+
+Respuesta exitosa:
 ```json
 {"ack": "c1", "ok": true}
 ```
 
-O en caso de fallo/interlock activo:
-
+Respuesta ante rechazo o condición de interlock:
 ```json
 {"ack": "c1", "ok": false, "reason": "overflow_a"}
 ```
 
 ---
 
-## 4. Consideraciones Físicas y de Alcance
+## 7. Modo de Simulación sin Sensores (`MODO_SIM_SIN_SENSORES`)
+
+En `firmware/tanques/config.h` se define:
+```c
+#define MODO_SIM_SIN_SENSORES 1
+```
+
+- **Propósito y excepción para pruebas (Sub-etapa 6.1)**:
+  Permite validar el microcontrolador de forma aislada en banco de trabajo sin cablear sensores físicos. En este modo, todas las lecturas de tanques y caudal se reportan como `null`, y la bandera `sensor_fault` se fija en `true`. Como **excepción exclusiva para pruebas de integración inicial**, el firmware permite el encendido y apagado de la bomba (conmutando el pin D9 y el LED integrado L en pin 13) para validar la cadena completa serie $\to$ bridge $\to$ MQTT $\to$ backend.
+- **Comportamiento requerido en Sub-etapa 6.2 (Firmware definitivo)**:
+  Al incorporar los sensores físicos (HX711, DS18B20, caudalímetro), el firmware aplicará interlocks estrictos: ante cualquier condición de `sensor_fault == true`, **todo intento de encendido (`value: true`) deberá ser rechazado de inmediato** por el microcontrolador con:
+  ```json
+  {"ack":"<id>","ok":false,"reason":"sensor_fault"}
+  ```
+  El comando de apagado (`value: false`) permanecerá siempre habilitado por seguridad física.
+  En el firmware definitivo para puesta en marcha con hardware, `#define MODO_SIM_SIN_SENSORES 0` quedará desactivado.
+
+---
+
+## 8. Consideraciones Físicas y de Alcance
 
 1. **RTC**: El Arduino Uno no cuenta con reloj de tiempo real (RTC). El sellado de tiempo (*timestamping*) lo realiza la Raspberry Pi al momento de recibir la trama e ingresarla a InfluxDB.
 2. **Válvulas**: Las llaves de paso entre tanques y drenajes son manuales. No existen actuadores ni sensores de estado de válvulas en el protocolo.
