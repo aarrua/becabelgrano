@@ -2,8 +2,8 @@
 
 Este directorio contiene la especificación y el código fuente del firmware para el microcontrolador Arduino Uno (ATmega328P) del kit didáctico.
 
-> **Estado actual**: Firmware implementado en `firmware/tanques/` para Arduino Uno (ATmega328P). Implementación modular sin memoria dinámica (`malloc`), sin la clase `String` y sin `ArduinoJson` para máxima estabilidad y bajo consumo de RAM (**32%**) y Flash (**45%**).
-> Sub-etapa 6.2 completada: soporte de sensores físicos, interlocks de seguridad, watchdog de bomba (60 s), persistencia en EEPROM bajo comando explícito `{"cmd":"save_cal"}`, sketch auxiliar de escaneo DS18B20 y guía de pruebas para armado de hardware.
+> **Estado actual**: Firmware implementado en `firmware/tanques/` para Arduino Uno (ATmega328P). Implementación modular sin memoria dinámica (`malloc`), sin la clase `String` y sin `ArduinoJson` para máxima estabilidad y bajo consumo de RAM (**39%**) y Flash (**54%**).
+> Sub-etapas 6.2, 6.3 y 6.4 completadas. 6.2: soporte de sensores físicos, interlocks de seguridad, watchdog de bomba (60 s), persistencia en EEPROM bajo comando explícito `{"cmd":"save_cal"}`, sketch auxiliar de escaneo DS18B20 y guía de pruebas para armado de hardware. 6.3: barras de nivel NeoPixel (`indicadores.cpp`). 6.4: simulación Wokwi (`firmware/wokwi/`). Consumo: Flash 54 %, RAM 39 %.
 
 ---
 
@@ -15,6 +15,7 @@ Este directorio contiene la especificación y el código fuente del firmware par
 - **`actuadores.h` / `actuadores.cpp`**: Control del relé de la bomba y LED de diagnóstico (pin 13). Apagado garantizado en `setup()` y watchdog de tiempo máximo continuo (60 s).
 - **`sensores.h` / `sensores.cpp`**: Adquisición de variables físicas (HX711, DallasTemperature no bloqueante, caudal por interrupciones INT0) e interlocks locales.
 - **`calibracion.h` / `calibracion.cpp`**: Parámetros de tara y escala en RAM con persistencia en EEPROM bajo comando explícito `{"cmd":"save_cal"}` y verificación por checksum.
+- **`indicadores.h` / `indicadores.cpp`**: Barras de nivel NeoPixel por tanque (color por temperatura, parpadeo de alarma), refresco no bloqueante.
 - **`protocolo.h` / `protocolo.cpp`**: Parser serial de comandos entrantes con buffer fijo de descarte seguro, comandos de calibración y formateador de telemetría periódica JSON v1 en Flash.
 
 ### 1.2 Utilidades y Documentación de Puesta en Marcha
@@ -146,7 +147,15 @@ Cada segundo se envía una trama JSON en una única línea terminada en salto de
    ```json
    {"cmd": "reset_cal"}
    ```
-5. **Persistir calibración en EEPROM**:
+5. **Capacidad máxima del tanque en RAM (100-10000 g)**:
+   ```json
+   {"cmd": "set_capacity", "tank": "a", "grams": 4000}
+   ```
+6. **Factor K del caudalímetro en RAM (10-10000 pulsos/L)**:
+   ```json
+   {"cmd": "cal_flow", "pulses_per_l": 450}
+   ```
+7. **Persistir calibración en EEPROM**:
    ```json
    {"cmd": "save_cal"}
    ```

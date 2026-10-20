@@ -81,7 +81,7 @@ graph TD
 | **Fase 1** | Simulador físico de tanques, bridge serial, InfluxDB, Grafana y nginx | **Completada** |
 | **Fase 2** | Backend Spring Boot (JWT, roles DOCENTE/ALUMNO, ActuatorGateway, auditoría H2) | **Completada** |
 | **Fase 3** | Frontend React SPA (Monitoreo, paneles Grafana embebidos, control seguro por roles) | **Completada** |
-| **Fase 4** | Puesta en marcha integral, integración en producción, bridge bidireccional y firmware | **En curso (Etapas 1, 2 y 3 completadas)** |
+| **Fase 4** | Puesta en marcha integral, integración en producción, bridge bidireccional y firmware | **En curso (Etapas 1 a 6 completadas; pendientes que dependen del hardware)** |
 
 Consultá el detalle de cambios históricos en el [CHANGELOG.md](file:///c:/Users/Ale/OneDrive%20-%20UTN%20-%20Santa%20Fe/UTN%202025/Beca%20Belgrano/becabelgrano/CHANGELOG.md).
 

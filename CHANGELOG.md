@@ -167,9 +167,20 @@ y este proyecto adhiere a [Conventional Commits](https://www.conventionalcommits
 - **Calibración obligatoria antes de conectar la bomba** (`firmware/GUIA_PRUEBAS_HARDWARE.md`, sección 1.1): celdas (tara y escala con peso conocido), capacidad máxima y caudalímetro, con lista de verificación. Documentado que la capacidad máxima y el factor K no tienen comando serie y que una calibración válida en EEPROM pisa los defaults nuevos tras re-flashear.
 - **`MODO_SIM_SIN_SENSORES`**: `firmware/README.md` explica cómo activarlo para probar el Uno solo y que con `0` el encendido se rechaza por `sensor_fault`.
 
-### Planned (Fase 4 - Próximas Etapas)
-- **Etapa 6 (Sub-etapa 6.3)**: Tiras NeoPixel (barra de nivel dinámico, gradiente térmico por temperatura y parpadeo intermitente en condición de alarma).
-- **Etapa 6 (Sub-etapa 6.4)**: Simulación en Wokwi (`diagram.json`, `wokwi.toml`) y cierre documental.
+### Added - Fase 4: Puesta en Marcha Integral (Etapa 6 - Firmware Arduino Uno - Sub-etapas 6.3 y 6.4)
+- **Comandos de calibración `set_capacity` y `cal_flow`** (cierran la laguna de la 6.2): `{"cmd":"set_capacity","tank":"a"|"b","grams":N}` (100-10000 g, rechazo `invalid_capacity`) y `{"cmd":"cal_flow","pulses_per_l":N}` (10-10000 pulsos/L, rechazo `invalid_flow_k`). Rechazan NaN y valores fuera de rango sin modificar nada; persisten solo con `save_cal`. El bridge los reenvía sin cambios (tests en `edge/tests/test_bridge.py`). Documentados en `firmware/GUIA_PRUEBAS_HARDWARE.md`.
+- **Sub-etapa 6.3 - NeoPixel** (`firmware/tanques/indicadores.cpp`): barra de nivel por tanque con brillo bajo constante, color por temperatura, último LED parpadeando en rojo ante `overflow`, `sensor_fault` o `pump_timeout`. Refresco no bloqueante y sin falla si las tiras no están conectadas. Alimentación externa de 5 V, GND común, 330 Ω en DIN y 1000 µF documentados en `docs/04-hardware.md`.
+- **Sub-etapa 6.4 - Wokwi** (`firmware/wokwi/`): `diagram.json` (Uno, DS18B20 con pull-up, relé, NeoPixel) y `wokwi.toml`. Limitaciones (HX711 con celda real, caudalímetro) en `docs/04-hardware.md`, sección 6.1. El diagrama no pudo verificarse en Wokwi.
+- **Consumo medido con `arduino-cli`**: Flash 17504 bytes (54%) y RAM global 799 bytes (39%).
+- Informe y decisiones: `docs/INFORME-6.md`, `docs/DECISIONES-6.md`.
+
+### Changed
+- Reemplazada en `firmware/GUIA_PRUEBAS_HARDWARE.md` la indicación de editar `calibracion.cpp` por los nuevos comandos de capacidad y factor K.
+
+### Planned (Fase 4 - Pendientes que dependen del hardware)
+- Calibrar en el kit real celdas, capacidad máxima y factor K; calibrar el umbral de 85 % y evaluar corte por volumen combinado.
+- Cargar direcciones DS18B20 reales y validar NeoPixel (corriente, pérdida de bytes seriales durante `show()`) y la simulación Wokwi.
+- Verificar el diseño en un celular físico.
 
 ---
 
