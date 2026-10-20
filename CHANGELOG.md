@@ -129,9 +129,39 @@ y este proyecto adhiere a [Conventional Commits](https://www.conventionalcommits
   - **Soporte de Telemetría Nula en Backend y SPA**: Actualizado `TelemetryFrame` y `InfluxTelemetryProvider` con `parseNullableDouble` para mapear campos nulos cuando los sensores están ausentes o desconectados, y actualizada la SPA (`PumpControl`, `TankVisualizer`, `MonitorView`) para renderizar `--` en lugar de valores espurios. Incorporados tests unitarios y de serialización en `InfluxTelemetryProviderTest` y `TelemetryFrameSerializationTest`.
   - **Invocación Serial Simplificada (`docs/05-verificacion-e2e.md`, `edge/README.md`)**: Documentado el uso directo de `--source serial:COM5` (o `/dev/ttyACM0`) aprovechando que `bridge.py` adopta automáticamente 115200 baudios por defecto sin requerir `:115200`.
 
+### Added - Fase 4: Puesta en Marcha Integral (Etapa 6 - Firmware Arduino Uno - Sub-etapa 6.2)
+- **Soporte de Sensores Físicos Reales (`firmware/tanques/`)**:
+  - **Celdas de Carga HX711**: Adquisición por software para dos convertidores HX711 (Tanque A en pines D4/D5 y Tanque B en D6/D7) con verificación de estado no bloqueante `scale.is_ready()` para asegurar loops ágiles de ejecución.
+  - **Sensores de Temperatura Dallas DS18B20**: Integración OneWire en pin D8 con `setWaitForConversion(false)` para lecturas asíncronas sin congelamiento del hilo principal por los 750 ms de conversión.
+  - **Caudalímetro de Efecto Hall**: Conteo de pulsos mediante interrupción externa `INT0` en pin D2 (`flow_sensor_isr`), cálculo de caudal volumétrico en `L/min` y protección atómica de variables volátiles.
+- **Calibración y Persistencia en EEPROM**:
+  - Estructura de datos `CalibracionData` en `firmware/tanques/calibracion.h` con número mágico (`0x5441`), versión, offsets de tara, escalas, capacidades máximas, factor K y verificación de integridad por checksum rotacional.
+  - **Regla estricta de persistencia**: Nada se guarda automáticamente en EEPROM. Únicamente se persiste ante el comando explícito `{"cmd":"save_cal"}`. Si la memoria está vacía (`0xFF`) o corrupta, se cargan valores nominales por defecto en RAM sin escribir la EEPROM.
+  - Comandos de calibración en RAM por puerto serie: `tare` (`{"cmd":"tare","tank":"a"|"b"}`), `cal_scale` (`{"cmd":"cal_scale","tank":"a"|"b","scale":...}`) y `reset_cal`.
+- **Watchdog de Seguridad de Bomba**:
+  - Temporizador continuo de encendido de bomba (`PUMP_MAX_RUNTIME_MS = 60000UL` por defecto). Si la bomba permanece encendida más de 60 segundos continuos sin nuevos comandos, se desconecta de forma autónoma por hardware y activa la alarma `pump_timeout: true`.
+  - Renovación del temporizador ante cualquier comando `{"cmd":"set","target":"pump","value":true}` recibido.
+  - Configurable y desactivable mediante `#define WATCHDOG_BOMBA_HABILITADO` (1 o 0).
+- **Integración Transversal de Alarma `pump_timeout`**:
+  - Documentada en `docs/01-contrato-datos.md` bajo el objeto `alarms` del contrato JSON v1.
+  - Ingesta en InfluxDB Line Protocol en `edge/bridge.py` (`fields.append(f"pump_timeout=...")`).
+  - Mapeo en backend en `InfluxTelemetryProvider.java` dentro del mapa de alarmas.
+  - Visualización y manejo semántico en la SPA (`MonitorView.tsx` y `PumpControl.tsx`).
+- **Interlocks Locales y Rechazo Estricto en Hardware**:
+  - Umbral de sobrellenado en 85.0% (`OVERFLOW_THRESHOLD_PCT`). Si el nivel en Tanque A o Tanque B alcanza o supera el 85%, el relé se apaga de inmediato por hardware.
+  - En modo real (`MODO_SIM_SIN_SENSORES 0`), cualquier intento de encendido (`value: true`) con `sensor_fault`, `overflow_a` u `overflow_b` activo es rechazado de inmediato con `ok: false` y motivo semántico específico (`"sensor_fault"`, `"overflow_a"`, `"overflow_b"`).
+  - El comando de corte (`value: false`) permanece siempre permitido por parada de emergencia física.
+- **Direcciones DS18B20 y Utilidad de Escaneo**:
+  - Constantes de ejemplo con advertencia del preprocesador `#warning` si no se reemplazan con las direcciones físicas reales al compilar fuera de modo simulación.
+  - Creado sketch utilitario `firmware/utilidades/leer_direcciones/leer_direcciones.ino` para escanear el bus OneWire (D8) y obtener las direcciones ROM de 64 bits de los DS18B20 formateadas directamente en sintaxis C++ para `config.h`.
+- **Guía de Pruebas y Puesta en Marcha (`firmware/GUIA_PRUEBAS_HARDWARE.md`)**:
+  - Procedimientos detallados paso a paso para el armado electrónico: prueba de relé y watchdog sin sensores, escaneo de DS18B20, tara y calibración de celdas HX711 con persistencia EEPROM, verificación de caudalímetro e interlocks de hardware con salidas esperadas en el monitor serie.
+- **Métricas de Compilación y Memoria en ATmega328P (`arduino-cli`)**:
+  - **Flash (Programa)**: **14678 bytes (45%)** sobre 32256 bytes (límite estricto < 80%).
+  - **RAM (Variables Globales)**: **661 bytes (32%)** sobre 2048 bytes (límite estricto < 75%).
+
 ### Planned (Fase 4 - Próximas Etapas)
-- **Etapa 6 (Sub-etapa 6.2)**: Integración de sensores reales (OneWire/DallasTemperature DS18B20 sin bloqueo en loop, HX711 x2 con celdas de 10 kg, caudalímetro por interrupciones en D2 e interlock definitivo en firmware).
-- **Etapa 6 (Sub-etapa 6.3)**: Tiras NeoPixel (barra de nivel, color por temperatura y parpadeo en alarma).
+- **Etapa 6 (Sub-etapa 6.3)**: Tiras NeoPixel (barra de nivel dinámico, gradiente térmico por temperatura y parpadeo intermitente en condición de alarma).
 - **Etapa 6 (Sub-etapa 6.4)**: Simulación en Wokwi (`diagram.json`, `wokwi.toml`) y cierre documental.
 
 ---

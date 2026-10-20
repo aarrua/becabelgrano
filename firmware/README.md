@@ -2,17 +2,24 @@
 
 Este directorio contiene la especificación y el código fuente del firmware para el microcontrolador Arduino Uno (ATmega328P) del kit didáctico.
 
-> **Estado actual**: Firmware implementado en `firmware/tanques/` para Arduino Uno (ATmega328P). Implementación modular sin memoria dinámica (`malloc`), sin la clase `String` y sin `ArduinoJson` para máxima estabilidad y bajo consumo de RAM (< 20%) y Flash (< 15%).
+> **Estado actual**: Firmware implementado en `firmware/tanques/` para Arduino Uno (ATmega328P). Implementación modular sin memoria dinámica (`malloc`), sin la clase `String` y sin `ArduinoJson` para máxima estabilidad y bajo consumo de RAM (**32%**) y Flash (**45%**).
+> Sub-etapa 6.2 completada: soporte de sensores físicos, interlocks de seguridad, watchdog de bomba (60 s), persistencia en EEPROM bajo comando explícito `{"cmd":"save_cal"}`, sketch auxiliar de escaneo DS18B20 y guía de pruebas para armado de hardware.
 
 ---
 
-## 1. Estructura del Código Fuente (`firmware/tanques/`)
+## 1. Estructura del Código Fuente
 
+### 1.1 Firmware Principal (`firmware/tanques/`)
 - **`tanques.ino`**: Sketch principal, orquestación del ciclo no bloqueante `setup()` y `loop()` con `millis()`.
-- **`config.h`**: Definición de pines (HX711, DS18B20, caudalímetro D2, relé D9, NeoPixels D10/D11), baudrate (115200) y configuración de simulación (`MODO_SIM_SIN_SENSORES`).
-- **`actuadores.h` / `actuadores.cpp`**: Control del relé de la bomba y LED de diagnóstico (pin 13). Apagado garantizado como primera instrucción en `setup()`.
-- **`sensores.h` / `sensores.cpp`**: Adquisición de variables físicas e interlocks locales.
-- **`protocolo.h` / `protocolo.cpp`**: Parser serial de comandos entrantes con buffer fijo de descarte seguro y formateador de telemetría periódica JSON v1 en Flash.
+- **`config.h`**: Definición de pines (HX711, DS18B20, caudalímetro D2, relé D9, NeoPixels D10/D11), baudrate (115200), watchdog (60 s) y configuración de simulación (`MODO_SIM_SIN_SENSORES`).
+- **`actuadores.h` / `actuadores.cpp`**: Control del relé de la bomba y LED de diagnóstico (pin 13). Apagado garantizado en `setup()` y watchdog de tiempo máximo continuo (60 s).
+- **`sensores.h` / `sensores.cpp`**: Adquisición de variables físicas (HX711, DallasTemperature no bloqueante, caudal por interrupciones INT0) e interlocks locales.
+- **`calibracion.h` / `calibracion.cpp`**: Parámetros de tara y escala en RAM con persistencia en EEPROM bajo comando explícito `{"cmd":"save_cal"}` y verificación por checksum.
+- **`protocolo.h` / `protocolo.cpp`**: Parser serial de comandos entrantes con buffer fijo de descarte seguro, comandos de calibración y formateador de telemetría periódica JSON v1 en Flash.
+
+### 1.2 Utilidades y Documentación de Puesta en Marcha
+- **`firmware/utilidades/leer_direcciones/leer_direcciones.ino`**: Sketch auxiliar para escanear el bus OneWire (pin D8), obtener las direcciones ROM de 64 bits de los DS18B20 e imprimirlas formateadas para `config.h`.
+- **`firmware/GUIA_PRUEBAS_HARDWARE.md`**: Guía paso a paso por componente (relé, DS18B20, HX711 con tara/escala/EEPROM, caudalímetro, interlocks) con salidas esperadas en el monitor serie para quien arme la electrónica.
 
 ---
 
@@ -114,17 +121,35 @@ Cada segundo se envía una trama JSON en una única línea terminada en salto de
   "alarms": {
     "overflow_a": false,
     "overflow_b": false,
-    "sensor_fault": false
+    "sensor_fault": false,
+    "pump_timeout": false
   },
   "mode": "auto"
 }
 ```
 
-### 6.2 Comandos de Control (Raspberry Pi $\to$ Arduino Uno)
+### 6.2 Comandos Soportados (Raspberry Pi $\to$ Arduino Uno)
 
-```json
-{"id": "c1", "cmd": "set", "target": "pump", "value": true}
-```
+1. **Control de actuadores (bomba)**:
+   ```json
+   {"id": "c1", "cmd": "set", "target": "pump", "value": true}
+   ```
+2. **Tara de celdas de carga en RAM**:
+   ```json
+   {"cmd": "tare", "tank": "a"}
+   ```
+3. **Calibración de factor de escala en RAM**:
+   ```json
+   {"cmd": "cal_scale", "tank": "a", "scale": 415.8}
+   ```
+4. **Restaurar valores de calibración por defecto en RAM**:
+   ```json
+   {"cmd": "reset_cal"}
+   ```
+5. **Persistir calibración en EEPROM**:
+   ```json
+   {"cmd": "save_cal"}
+   ```
 
 ### 6.3 Manejo de Campos Faltantes y Claves Adicionales (`ts`)
 
