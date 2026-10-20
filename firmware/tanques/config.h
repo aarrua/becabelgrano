@@ -127,4 +127,8 @@
 // Con nivel inválido la bandera queda activa. Debe ser menor que el umbral.
 #define OVERFLOW_REARME_PCT       80.0f
 
+// Falla al compilar si la histéresis queda invertida o nula (ver checklist en AGENTS.md).
+static_assert(OVERFLOW_REARME_PCT < OVERFLOW_THRESHOLD_PCT,
+              "OVERFLOW_REARME_PCT debe ser menor que OVERFLOW_THRESHOLD_PCT (config.h)");
+
 #endif // CONFIG_H
