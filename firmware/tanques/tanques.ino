@@ -5,6 +5,8 @@
  * ==============================================================================
  * Arquitectura modular de telemetría y control sin asignación dinámica de memoria (heap).
  * 
+ * Sub-Etapa 6.3: barras de nivel NeoPixel (indicadores.cpp).
+ *
  * Sub-Etapa 6.2:
  * - Sensores reales (HX711, OneWire/DS18B20 asíncrono, caudalímetro por interrupciones).
  * - Interlocks de sobrellenado (>= 85%) y rechazo de activación ante sensor_fault.
@@ -18,6 +20,7 @@
 #include "sensores.h"
 #include "calibracion.h"
 #include "protocolo.h"
+#include "indicadores.h"
 
 static unsigned long s_last_telemetry_ms = 0;
 static unsigned long s_seq_counter = 0;
@@ -36,6 +39,9 @@ void setup() {
     // 4. Inicializar subsistema de sensores
     sensores_init();
 
+    // 5. Inicializar tiras NeoPixel (apagadas; no fallan si no están conectadas)
+    indicadores_init();
+
     s_last_telemetry_ms = millis();
 }
 
@@ -46,7 +52,10 @@ void loop() {
     // 2. Verificar watchdog de tiempo continuo máximo de encendido de bomba
     actuadores_verificar_watchdog();
 
-    // 2. Emisión periódica de telemetría a frecuencia de 1 Hz (1000 ms)
+    // 3. Refrescar barras de nivel NeoPixel con las últimas lecturas (no bloqueante)
+    indicadores_actualizar(sensores_get_last(), actuadores_get_pump_timeout());
+
+    // 4. Emisión periódica de telemetría a frecuencia de 1 Hz (1000 ms)
     unsigned long now_ms = millis();
     if (now_ms - s_last_telemetry_ms >= TELEMETRY_INTERVAL_MS) {
         s_last_telemetry_ms = now_ms;

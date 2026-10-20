@@ -38,6 +38,17 @@
 #define PIN_LED_BUILTIN_ACTUADOR 13
 
 // ==============================================================================
+// Indicadores Visuales NeoPixel (barra de nivel por tanque)
+// ==============================================================================
+#define NEOPIXEL_LEDS_POR_TIRA    8     // LEDs por tira (1 tira por tanque)
+#define NEOPIXEL_BRILLO           20    // 0-255. Bajo a propósito: limita corriente y deslumbramiento
+#define NEOPIXEL_BLINK_MS         300   // Semiperiodo de parpadeo del LED de alarma
+// Color de la barra según temperatura del tanque (monitoreo pasivo, sin control térmico)
+#define NEOPIXEL_TEMP_AZUL_MAX_C  22.0f // < 22 °C  azul
+#define NEOPIXEL_TEMP_VERDE_MAX_C 30.0f // < 30 °C  verde
+#define NEOPIXEL_TEMP_AMBAR_MAX_C 40.0f // < 40 °C  ámbar; >= 40 °C rojo
+
+// ==============================================================================
 // Direcciones ROM de Sensores DS18B20 (Bus OneWire en pin D8)
 // ==============================================================================
 // Cada sensor DS18B20 tiene una dirección única de 8 bytes (64 bits).
