@@ -482,15 +482,34 @@ class TanquesBridge:
             self.telemetry_success_count += 1
             if self.log_interval > 0 and self.telemetry_success_count % self.log_interval == 0:
                 iso_time = datetime.now(timezone.utc).isoformat()
+                tank_a = data.get("tank_a") if isinstance(data.get("tank_a"), dict) else {}
+                tank_b = data.get("tank_b") if isinstance(data.get("tank_b"), dict) else {}
+                actuators = data.get("actuators") if isinstance(data.get("actuators"), dict) else {}
+
+                seq_val = data.get("seq")
+                seq_str = str(seq_val) if seq_val is not None else "s/d"
+
+                lvl_a = tank_a.get("level_pct")
+                lvl_a_str = f"{float(lvl_a):.1f}%" if lvl_a is not None else "s/d"
+
+                lvl_b = tank_b.get("level_pct")
+                lvl_b_str = f"{float(lvl_b):.1f}%" if lvl_b is not None else "s/d"
+
+                pump_val = actuators.get("pump")
+                pump_str = str(pump_val) if pump_val is not None else "s/d"
+
+                flow_val = data.get("flow_lpm")
+                flow_str = f"{float(flow_val):.2f} L/min" if flow_val is not None else "s/d"
+
                 logger.info(
-                    "[%s] InfluxDB: %d escrituras exitosas acumuladas (última seq=%d | A: %s%% | B: %s%% | Bomba: %s | Q: %.2f L/min)",
+                    "[%s] InfluxDB: %d escrituras exitosas acumuladas (última seq=%s | A: %s | B: %s | Bomba: %s | Q: %s)",
                     iso_time,
                     self.telemetry_success_count,
-                    data.get("seq", 0),
-                    data.get("tank_a", {}).get("level_pct"),
-                    data.get("tank_b", {}).get("level_pct"),
-                    data.get("actuators", {}).get("pump"),
-                    data.get("flow_lpm", 0.0)
+                    seq_str,
+                    lvl_a_str,
+                    lvl_b_str,
+                    pump_str,
+                    flow_str
                 )
 
 

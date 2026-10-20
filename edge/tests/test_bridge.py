@@ -401,4 +401,54 @@ def test_format_influx_line_with_null_sensors() -> None:
     assert "tank_a_weight_g" not in line
 
 
+def test_process_device_line_with_null_sensors_logging(caplog: pytest.LogCaptureFixture) -> None:
+    """14. Tramas con sensores o actuadores en null no fallan en los logs periódicos del bridge."""
+    import logging
+    mock_writer = MagicMock()
+    mock_writer.write_line_protocol.return_value = True
+
+    bridge = TanquesBridge(
+        influx_writer=mock_writer,
+        log_interval=1  # Loggea en cada trama exitosa
+    )
+
+    trama_uno_sin_sensores = {
+        "v": 1,
+        "seq": 1,
+        "uptime_ms": 1050,
+        "tank_a": {"level_pct": None, "weight_g": None, "temp_c": None},
+        "tank_b": {"level_pct": None, "weight_g": None, "temp_c": None},
+        "flow_lpm": None,
+        "actuators": {"pump": False},
+        "alarms": {"tank_a_sensor_fault": True, "tank_b_sensor_fault": True, "temp_sensor_fault": True, "leak_detected": False}
+    }
+
+    trama_con_nulos_y_pump_nula = {
+        "v": 1,
+        "seq": 2,
+        "uptime_ms": 2100,
+        "tank_a": {"level_pct": None, "weight_g": None, "temp_c": None},
+        "tank_b": {"level_pct": None, "weight_g": None, "temp_c": None},
+        "flow_lpm": None,
+        "actuators": {"pump": None},
+        "alarms": {"sensor_fault": True}
+    }
+
+    with caplog.at_level(logging.INFO, logger="edge-bridge"):
+        # Trama 1: Modo sin sensores típico de Arduino Uno
+        bridge.process_device_line(json.dumps(trama_uno_sin_sensores))
+        assert bridge.telemetry_success_count == 1
+        assert "A: s/d" in caplog.text
+        assert "B: s/d" in caplog.text
+        assert "Q: s/d" in caplog.text
+        assert "Bomba: False" in caplog.text
+        assert "seq=1" in caplog.text
+
+        # Trama 2: Sensores y bomba en null
+        bridge.process_device_line(json.dumps(trama_con_nulos_y_pump_nula))
+        assert bridge.telemetry_success_count == 2
+        assert "seq=2" in caplog.text
+        assert "Bomba: s/d" in caplog.text
+
+
 
