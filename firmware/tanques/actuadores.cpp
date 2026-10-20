@@ -14,9 +14,13 @@ static inline uint8_t rele_pin_state(bool encendida) {
 }
 
 void actuadores_init() {
-    // 1. Configurar de inmediato el pin del relé como salida y forzar corte
-    pinMode(PIN_RELE_BOMBA, OUTPUT);
+    // 1. Forzar corte del relé ANTES de configurar el pin como salida.
+    // En un pin de entrada, digitalWrite fija el pull-up (HIGH) o lo quita (LOW);
+    // al pasar a OUTPUT el pin sale ya con el nivel de apagado. Con el orden inverso
+    // el pin arrancaría en LOW un instante, y en un relé activo en bajo eso
+    // es un pulso de encendido de la bomba en cada reset.
     digitalWrite(PIN_RELE_BOMBA, rele_pin_state(false));
+    pinMode(PIN_RELE_BOMBA, OUTPUT);
 
     // 2. Configurar el LED de diagnóstico integrado (pin 13)
     pinMode(PIN_LED_BUILTIN_ACTUADOR, OUTPUT);
