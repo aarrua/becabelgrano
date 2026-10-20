@@ -7,7 +7,7 @@ import { ApiError } from '../types/telemetry'
 
 interface PumpControlProps {
   currentPumpState: boolean | null
-  flowLpm?: number
+  flowLpm?: number | null
   isInterlockBlocked?: boolean
   interlockReason?: string
   isTelemetryStale?: boolean
@@ -32,7 +32,7 @@ function mapInterlockReason(reason?: string): string {
 
 export function PumpControl({
   currentPumpState,
-  flowLpm = 0,
+  flowLpm,
   isInterlockBlocked = false,
   interlockReason,
   isTelemetryStale = false,
@@ -111,8 +111,8 @@ export function PumpControl({
           <div className="pump-flow-badge" title="Caudal medido en la impulsión">
             <FlowIcon width="16" height="16" />
             <span className="flow-badge-label">Caudal de entrada:</span>
-            <span className="flow-badge-val">{flowLpm.toFixed(2)}</span>
-            <span className="flow-badge-unit">L/min</span>
+            <span className="flow-badge-val">{flowLpm != null ? flowLpm.toFixed(2) : '--'}</span>
+            <span className="flow-badge-unit">{flowLpm != null ? 'L/min' : ''}</span>
           </div>
 
           <span

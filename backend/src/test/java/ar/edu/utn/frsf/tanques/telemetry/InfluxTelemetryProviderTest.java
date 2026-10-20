@@ -120,4 +120,54 @@ class InfluxTelemetryProviderTest {
         assertNull(frame.actuators().get("pump"), "pump debe ser null");
         assertFalse(provider.isTelemetryFresh(), "isTelemetryFresh() debe ser false");
     }
+
+    @Test
+    @DisplayName("Trama con sensores en null (MODO_SIM_SIN_SENSORES) retorna niveles y temperaturas en null")
+    void testWhenSensorsAreNull_ReturnsTelemetryWithNullLevelsAndTemp() {
+        com.influxdb.client.InfluxDBClient mockClient = org.mockito.Mockito.mock(com.influxdb.client.InfluxDBClient.class);
+        com.influxdb.client.QueryApi mockQueryApi = org.mockito.Mockito.mock(com.influxdb.client.QueryApi.class);
+        org.mockito.Mockito.when(mockClient.getQueryApi()).thenReturn(mockQueryApi);
+
+        com.influxdb.query.FluxTable table = new com.influxdb.query.FluxTable();
+        java.time.Instant now = java.time.Instant.now();
+
+        java.util.List<com.influxdb.query.FluxRecord> records = new java.util.ArrayList<>();
+        records.add(createMockRecord("seq", 101L, now, "auto"));
+        records.add(createMockRecord("uptime_ms", 5000L, now, "auto"));
+        records.add(createMockRecord("pump", false, now, "auto"));
+        records.add(createMockRecord("overflow_a", false, now, "auto"));
+        records.add(createMockRecord("overflow_b", false, now, "auto"));
+        records.add(createMockRecord("sensor_fault", true, now, "auto"));
+        table.getRecords().addAll(records);
+
+        org.mockito.Mockito.when(mockQueryApi.query(org.mockito.ArgumentMatchers.anyString()))
+                .thenReturn(java.util.List.of(table));
+
+        InfluxTelemetryProvider provider = new InfluxTelemetryProvider(mockClient, "tanques");
+        ar.edu.utn.frsf.tanques.dto.TelemetryFrame frame = provider.getLatestTelemetry();
+
+        assertNotNull(frame, "La trama no debe ser null");
+        assertEquals(101L, frame.seq());
+        assertEquals(5000L, frame.uptime_ms());
+        assertEquals("auto", frame.mode());
+        assertNull(frame.tank_a().level_pct(), "tank_a.level_pct debe ser null si el sensor está ausente");
+        assertNull(frame.tank_a().temp_c(), "tank_a.temp_c debe ser null si el sensor está ausente");
+        assertNull(frame.tank_a().weight_g(), "tank_a.weight_g debe ser null si el sensor está ausente");
+        assertNull(frame.tank_b().level_pct(), "tank_b.level_pct debe ser null si el sensor está ausente");
+        assertNull(frame.tank_b().temp_c(), "tank_b.temp_c debe ser null si el sensor está ausente");
+        assertNull(frame.tank_b().weight_g(), "tank_b.weight_g debe ser null si el sensor está ausente");
+        assertNull(frame.flow_lpm(), "flow_lpm debe ser null si el sensor está ausente");
+        assertEquals(Boolean.FALSE, frame.actuators().get("pump"));
+        assertEquals(Boolean.TRUE, frame.alarms().get("sensor_fault"));
+        assertTrue(provider.isTelemetryFresh(), "isTelemetryFresh() debe ser true al haber registros recientes");
+    }
+
+    private com.influxdb.query.FluxRecord createMockRecord(String field, Object value, java.time.Instant time, String mode) {
+        com.influxdb.query.FluxRecord r = org.mockito.Mockito.mock(com.influxdb.query.FluxRecord.class);
+        org.mockito.Mockito.when(r.getField()).thenReturn(field);
+        org.mockito.Mockito.when(r.getValue()).thenReturn(value);
+        org.mockito.Mockito.when(r.getTime()).thenReturn(time);
+        org.mockito.Mockito.when(r.getValueByKey("mode")).thenReturn(mode);
+        return r;
+    }
 }

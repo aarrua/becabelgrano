@@ -15,7 +15,7 @@ export interface TelemetryFrame {
   uptime_ms: number
   tank_a: TankTelemetry
   tank_b: TankTelemetry
-  flow_lpm: number
+  flow_lpm: number | null
   actuators: Record<string, boolean | null>
   alarms: Record<string, boolean>
   mode: string

@@ -144,7 +144,7 @@ export function MonitorView() {
       {/* Panel de Control de Bomba (con caudal de entrada y comportamiento según rol) */}
       <PumpControl
         currentPumpState={pumpState}
-        flowLpm={telemetry?.flow_lpm ?? 0}
+        flowLpm={telemetry?.flow_lpm}
         isInterlockBlocked={isInterlockBlocked}
         interlockReason={interlockReason}
         isTelemetryStale={isStale}

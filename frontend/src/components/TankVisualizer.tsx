@@ -40,9 +40,9 @@ function TankCylinder({ name, subtitle, telemetry, isOverflow, isAlarmActive }: 
         <span className="level-banner-label">Nivel útil</span>
         <div className="level-banner-digits">
           <span className={`level-number ${isHigh ? 'text-alert' : ''}`}>
-            {level.toFixed(1)}
+            {telemetry.level_pct != null ? level.toFixed(1) : '--'}
           </span>
-          <span className="level-unit">%</span>
+          <span className="level-unit">{telemetry.level_pct != null ? '%' : ''}</span>
         </div>
       </div>
 
