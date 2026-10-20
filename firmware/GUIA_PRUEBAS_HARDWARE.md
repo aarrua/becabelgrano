@@ -45,15 +45,32 @@ Los valores de fábrica en `firmware/tanques/calibracion.cpp` son **nominales, d
 2. Cargar las direcciones DS18B20 reales y poner `DS18B20_SON_DIRECCIONES_DE_EJEMPLO` en `0` (Prueba 2 de esta guía).
 3. Con la bomba **desconectada** (el módulo relé puede quedar conectado como testigo).
 
-### 1.1.3 Capacidad máxima y factor K (se cambian en el código)
+### 1.1.3 Capacidad máxima y factor K (comandos `set_capacity` y `cal_flow`)
 
-**No existe comando serie para `max_weight_a`, `max_weight_b` ni `flow_k_factor`.** Se modifican en `calibracion_reset_defaults()` de `firmware/tanques/calibracion.cpp` y hay que volver a cargar el sketch.
+La capacidad máxima de cada tanque y el factor K del caudalímetro se fijan por comando serie. Quedan en RAM hasta ejecutar `save_cal`; no hace falta recompilar ni recargar el sketch. Los valores de fábrica siguen en `calibracion_reset_defaults()`.
 
-1. Medir la capacidad útil real de cada tanque (la masa de agua, en gramos, que corresponde al 100 %) y ponerla en `max_weight_a` y `max_weight_b`.
+| Comando | Campos | Rango aceptado | Rechazo (`reason`) |
+| :--- | :--- | :--- | :--- |
+| `set_capacity` | `tank` (`"a"`/`"b"`), `grams` | 100 a 10000 g | `invalid_capacity` |
+| `cal_flow` | `pulses_per_l` | 10 a 10000 pulsos/L | `invalid_flow_k` |
+
+Un valor fuera de rango, no numérico o con un `tank` distinto de `a`/`b` se rechaza con `{"ack":"...","ok":false,"reason":"..."}` y **no modifica nada**.
+
+1. Medir la capacidad útil real de cada tanque (la masa de agua, en gramos, que corresponde al 100 %) y enviar:
+   ```json
+   {"cmd":"set_capacity","tank":"a","grams":4000}
+   {"cmd":"set_capacity","tank":"b","grams":2450}
+   ```
 2. **Calibrar el caudalímetro** (sin usar la bomba): pasar por el caudalímetro, a mano o por gravedad, un volumen conocido (por ejemplo 1 L medido con una jarra graduada) a caudal aproximadamente constante y cronometrar el tiempo `T`. Calcular el caudal real `V / T` en L/min y compararlo con el promedio de `flow_lpm` de la telemetría durante esa pasada. Repetir al menos 3 veces y promediar:
    $$K_{nuevo} = K_{actual} \times \frac{\text{flow\_lpm medido}}{\text{caudal real}}$$
-   Poner `K_nuevo` en `flow_k_factor`.
-3. Cargar el sketch. **Atención:** si ya hay una calibración válida en la EEPROM, el firmware la carga al arrancar y **pisa los valores nuevos** de la capacidad y del factor K. En ese caso, enviar `reset_cal` y luego `save_cal` (sección 4, "Calibrar con el sistema armado") para adoptar los valores nuevos. `reset_cal` también restaura tara y escala por defecto, así que **hacer esto antes de los pasos 1.1.4**.
+   Enviar el resultado:
+   ```json
+   {"cmd":"cal_flow","pulses_per_l":450}
+   ```
+3. Ejecutar `save_cal` cuando los valores sean los definitivos (Paso C de la sección 4). Sin `save_cal`, un `RESET` o un corte de energía restaura lo guardado en la EEPROM (o los valores de fábrica).
+4. Con el bridge en marcha, los comandos se envían por MQTT con `id` único (ver "Calibrar con el sistema armado", sección 4).
+
+> `reset_cal` restaura **todos** los parámetros (tara, escala, capacidad y K) a los valores de fábrica en RAM.
 
 ### 1.1.4 Celdas de carga: tara y escala con peso conocido
 
@@ -66,13 +83,13 @@ Seguir la sección 4 (Prueba 3) completa, para **ambos** tanques:
 
 ### 1.1.5 Comprobar el interlock de nivel con la calibración hecha
 
-Con la bomba aún desconectada, cargar el tanque con una masa/volumen conocido equivalente a más del 85 % de `max_weight` y confirmar `overflow_a` u `overflow_b` en `true` y el rechazo del encendido (Prueba 5, Caso B). Repetir para **ambos** tanques: el umbral de 85 % aplica a cualquiera de los dos.
+Con la bomba aún desconectada, cargar el tanque con una masa/volumen conocido equivalente a más del 85 % de la capacidad máxima y confirmar `overflow_a` u `overflow_b` en `true` y el rechazo del encendido (Prueba 5, Caso B). Repetir para **ambos** tanques: el umbral de 85 % aplica a cualquiera de los dos.
 
 ### 1.1.6 Lista de verificación previa a conectar la bomba
 
 - [ ] `MODO_SIM_SIN_SENSORES` en `0` y direcciones DS18B20 reales.
-- [ ] `max_weight_a` y `max_weight_b` iguales a la capacidad real medida.
-- [ ] `flow_k_factor` calibrado con volumen conocido.
+- [ ] Capacidad de A y B (`set_capacity`) igual a la capacidad real medida.
+- [ ] Factor K (`cal_flow`) calibrado con volumen conocido.
 - [ ] Tara y escala de A y B calibradas y verificadas con una segunda masa.
 - [ ] `save_cal` ejecutado y persistencia comprobada tras un `RESET`.
 - [ ] Interlock `overflow_a` / `overflow_b` comprobado a 85 % en ambos tanques.
@@ -206,7 +223,7 @@ El kit utiliza dos convertidores HX711 de 24 bits para medir el peso del líquid
 
 ### Calibrar con el sistema armado (vía bridge y MQTT)
 
-Los comandos `tare`, `cal_scale`, `reset_cal` y `save_cal` **atraviesan el bridge hasta el puerto serie**: `edge/bridge.py` no filtra por nombre de comando y reenvía al Arduino cualquier JSON válido que traiga `id`. Por eso se puede calibrar con el kit completo en marcha, sin detener el bridge ni desconectar nada.
+Los comandos `tare`, `cal_scale`, `set_capacity`, `cal_flow`, `reset_cal` y `save_cal` **atraviesan el bridge hasta el puerto serie**: `edge/bridge.py` no filtra por nombre de comando y reenvía al Arduino cualquier JSON válido que traiga `id`. Por eso se puede calibrar con el kit completo en marcha, sin detener el bridge ni desconectar nada.
 
 Particularidades:
 
@@ -234,6 +251,9 @@ Procedimiento (desde la Raspberry Pi, en `infra/`):
    {"id":"cal-tare-b-1","cmd":"tare","tank":"b"}
    {"id":"cal-scale-a-1","cmd":"cal_scale","tank":"a","scale":415.8}
    {"id":"cal-scale-b-1","cmd":"cal_scale","tank":"b","scale":415.8}
+   {"id":"cal-cap-a-1","cmd":"set_capacity","tank":"a","grams":4000}
+   {"id":"cal-cap-b-1","cmd":"set_capacity","tank":"b","grams":2450}
+   {"id":"cal-flow-1","cmd":"cal_flow","pulses_per_l":450}
    {"id":"cal-reset-1","cmd":"reset_cal"}
    {"id":"cal-save-1","cmd":"save_cal"}
    ```
