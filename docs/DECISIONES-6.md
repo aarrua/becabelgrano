@@ -31,22 +31,23 @@ Cada punto se corrigió en un commit separado. Memoria final medida: ver `docs/I
 6. **`tare` con HX711 no listo**: responde `ok:false, reason:"sensor_not_ready"` y no cambia la tara; el crudo saturado también cuenta como no listo. En `MODO_SIM_SIN_SENSORES` siempre responde `sensor_not_ready` (antes "tareaba" 0). `sensores_get_raw_hx711_a/b` se reemplazaron por `sensores_leer_raw_a/b(long&)`, que devuelven `bool`.
 7. **Ids de hasta 36 caracteres** (UUID con guiones): buffer de `id` de 37 bytes y buffer de recepción de 96 a 128 bytes. Se amplió el de recepción porque el bridge reenvía el campo `ts` y un `set` con id de 36 más `ts` mide unos 105 caracteres, que con 96 se descartaría por desborde. RAM global: 42 % (865 bytes), por debajo del 75 %. Los ids que genera hoy el backend miden 10 caracteres.
 
-## Propuestas (NO implementadas)
+## Propuestas aprobadas e implementadas
 
 ### 8a. Histéresis del interlock de sobrellenado (corte 85 %, rearme bajo 80 %)
-Hoy `overflow_x` se evalúa sin memoria: con el nivel oscilando alrededor de 85 % (olas, ruido de la celda, bomba que apaga y enciende) la alarma y el rechazo del encendido conmutan en cada ciclo.
+Implementada tal como se propuso: una bandera por tanque que se activa al llegar a 85 % y se desactiva solo bajo 80 % (`OVERFLOW_REARME_PCT`). Entre 80 y 85 % conserva el estado y el encendido sigue rechazado. Decisiones de implementación:
+- **Nivel inválido deja la bandera en `true`**, por lo que `alarms.overflow_x` también se levanta ante una falla de la celda (además de `sensor_fault`). La alarma NeoPixel y el rechazo `overflow_x` reflejan eso.
+- **Arranque**: las banderas inician en `true` y se resuelven con la primera lectura válida. Un kit que arranca con un tanque entre 80 y 85 % queda bloqueado hasta bajar de 80 %; es lo conservador.
+- **Paridad**: `edge/simulator.py` (`update_overflow_flag`, `interlocks.overflow_rearm_pct`) y `MockTelemetryProvider` (`tanques.interlocks.overflow-rearm-pct`) usan la misma regla; el rearme se acota al umbral para que la histéresis nunca sea negativa. El contrato JSON no cambia.
+- **Verificación**: tests en `edge/test_edge.py` y `MockTelemetryProviderTest`. El firmware no tiene arnés de tests en este repo, así que su lógica solo se verificó compilando.
+- Pendiente: calibrar el 80 % junto con el 85 % con el kit real. El simulador y el mock tienen la bomba apagada por el corte, así que la histéresis no cambia los picos medidos del ciclo de bombeo.
 
-Propuesta: una bandera de estado por tanque, `overflow = true` al llegar a 85 % y `false` solo cuando el nivel baja de 80 % (`OVERFLOW_REARME_PCT` en `config.h`). El encendido se rechaza mientras la bandera esté activa, incluso entre 80 y 85 %.
+### 8b. La temperatura no cuenta para `sensor_fault` (versión sin campo nuevo)
+Implementada sin `temp_fault`: la falla del DS18B20 se informa solo con `temp_c: null`. Consecuencias:
+- `sensor_fault` significa "falla de celdas de carga o de su plausibilidad". Contrato y flujo de comandos actualizados.
+- El fail-safe por nivel inválido no cambia (depende del nivel).
+- Verificado que la alarma NeoPixel (`indicadores.cpp`) usa `overflow`, `sensor_fault` y `pump_timeout` sin asumir temperatura, y que la barra queda gris ante temperatura inválida. En la SPA, `TankVisualizer` ya mostraba `--` ante `temp_c` nulo; se ajustaron los textos de `MonitorView` y `PumpControl` que hablaban de "sensores" en general.
+- **Riesgo aceptado**: se puede operar con un DS18B20 roto y la SPA solo lo muestra como `--` en la temperatura, sin alerta propia. Si se necesita visibilidad, agregar `temp_fault` (cambio de contrato; ver la lista de consumidores en la propuesta original).
+- `MODO_SIM_SIN_SENSORES` no cambia: sigue emitiendo todo `null` y `sensor_fault: true`.
 
-Impacto: cambia el firmware y conviene reflejar el parámetro en `edge/simulator.py` y `edge/config.yaml` para mantener paridad. El contrato JSON no cambia. Trade-off: el tanque debe vaciarse 5 puntos más antes de rearmar. Riesgo: una bandera pegada ante una falla de lectura; se resolvería dejando la bandera en `true` ante nivel inválido (consistente con el fail-safe del punto 1). El 80 % también debe calibrarse con el kit real junto con el umbral de 85 %.
-
-### 8b. Que un fallo del DS18B20 no bloquee el encendido de la bomba
-Hoy cualquier falla de sensor, incluida la temperatura, levanta `sensor_fault` y el firmware rechaza el encendido. La temperatura es solo monitoreo pasivo y no interviene en ninguna decisión de seguridad.
-
-Propuesta: reservar `sensor_fault` para lo que afecta la seguridad (celdas de carga y su plausibilidad) e informar la falla de temperatura aparte (`temp_fault`, o solo con los `temp_c: null` que ya existen).
-
-Cambio de contrato que implica:
-- `alarms.sensor_fault` deja de significar "cualquier sensor": hay que redefinirlo en `docs/01-contrato-datos.md` y `docs/02-flujo-comandos.md`.
-- Si se agrega `alarms.temp_fault` es una clave nueva: simulador, bridge (`format_influx_line`), InfluxDB/Grafana, DTOs y tests del backend (`TelemetryFrameSerializationTest`, `InfluxTelemetryProviderTest`, mocks) y la SPA (`TankVisualizer`, `MonitorView`) deben tolerarla. Los consumidores que hoy leen `sensor_fault` para mostrar "falla de sensores" dejarían de ver la falla de temperatura.
-- El fail-safe del punto 1 no cambia (depende del nivel, no de `sensor_fault`).
-- Trade-off: se puede operar con un DS18B20 roto, a costa de que nadie se entere de esa falla salvo que la SPA la muestre. Recomendación: implementarlo solo junto con un `temp_fault` visible en la SPA.
+### `tare` con promedio de muestras
+Promedia `HX711_TARE_MUESTRAS` (10) lecturas con un tope de `HX711_TARE_TIMEOUT_MS` (1100 ms) en total. Una muestra no lista a tiempo o saturada rechaza con `sensor_not_ready` y no cambia la tara. El loop queda bloqueado ese lapso (hasta ~1 s con el HX711 a 10 Hz, ~125 ms a 80 Hz): durante ese tiempo no hay telemetría ni watchdog de bomba, y el buffer serie de 64 bytes del Uno podría desbordarse si llegan comandos. Es aceptable porque la tara se hace con el sistema en reposo. El tope de 1,1 s es un poco mayor que 1 s a propósito, para que 10 muestras a 10 Hz no fallen por un margen de milisegundos. No verificado con hardware real.

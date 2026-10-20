@@ -181,6 +181,11 @@ y este proyecto adhiere a [Conventional Commits](https://www.conventionalcommits
 - `cal_scale` validado por rango (`invalid_scale`); `tare` responde `sensor_not_ready` si el HX711 no está listo; relé forzado a apagado antes de `pinMode(OUTPUT)`; ids de hasta 36 caracteres (buffer de recepción de 128 bytes).
 - Propuestas no implementadas (histéresis 85/80 %, falla de DS18B20 sin bloquear la bomba) y todas las decisiones en `docs/DECISIONES-6.md`; casos de prueba en `firmware/GUIA_PRUEBAS_HARDWARE.md`, sección 7.
 
+### Changed - Propuestas aprobadas de la revisión de seguridad del firmware (8a, 8b y `tare`)
+- **Histéresis del interlock de sobrellenado (8a)**: corte en 85 %, rearme bajo 80 % por tanque (`OVERFLOW_REARME_PCT` en `config.h`). La bandera queda activa ante nivel inválido y al arrancar hasta la primera lectura válida. Replicada en `edge/simulator.py` (`interlocks.overflow_rearm_pct` en `edge/config.yaml`) y en el mock del backend (`tanques.interlocks.overflow-rearm-pct`), con tests en ambos. El firmware no tiene arnés de tests: se verificó solo la compilación.
+- **La temperatura deja de contar para `sensor_fault` (8b, sin campo nuevo)**: `temp_c` sale `null` si el DS18B20 falla, pero `sensor_fault` depende solo de las celdas de carga y su plausibilidad. Un DS18B20 caído ya no bloquea el encendido de la bomba. Actualizados `docs/01-contrato-datos.md`, `docs/02-flujo-comandos.md`, la guía de pruebas y los textos de la SPA ("Fallo de Sensores de Nivel").
+- **`tare` promedia 10 muestras del HX711** con un tope de 1,1 s en total; si alguna falla responde `sensor_not_ready` y conserva la tara vigente. Reemplaza `sensores_leer_raw_a/b` por `sensores_promediar_raw_a/b`.
+
 ### Changed
 - Reemplazada en `firmware/GUIA_PRUEBAS_HARDWARE.md` la indicación de editar `calibracion.cpp` por los nuevos comandos de capacidad y factor K.
 
