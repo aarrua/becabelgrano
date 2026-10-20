@@ -9,11 +9,22 @@ public class InterlockConfig {
 
     private double overflowThresholdPct = 85.0;
 
+    /** Histéresis: la alarma de sobrellenado se rearma recién cuando el nivel baja de este valor. */
+    private double overflowRearmPct = 80.0;
+
     public double getOverflowThresholdPct() {
         return overflowThresholdPct;
     }
 
     public void setOverflowThresholdPct(double overflowThresholdPct) {
         this.overflowThresholdPct = overflowThresholdPct;
+    }
+
+    public double getOverflowRearmPct() {
+        return overflowRearmPct;
+    }
+
+    public void setOverflowRearmPct(double overflowRearmPct) {
+        this.overflowRearmPct = overflowRearmPct;
     }
 }
