@@ -3,6 +3,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { sendActuatorCommand } from '../api/actuators'
 import { useAuth } from '../context/AuthContext'
 import { PumpIcon, FlowIcon, LockIcon, AlertTriangleIcon, CheckCircleIcon } from './Icons'
+import { OVERFLOW_THRESHOLD_PCT } from '../config/interlock'
 import { ApiError } from '../types/telemetry'
 
 interface PumpControlProps {
@@ -19,10 +20,10 @@ function mapInterlockReason(reason?: string): string {
     return 'Encendido bloqueado: telemetría desactualizada (> 5 s) y estado no verificado'
   }
   if (reason.toLowerCase().includes('overflow_a')) {
-    return 'Interlock de sobrellenado activo: Nivel crítico en Tanque A (> 85%)'
+    return `Interlock de sobrellenado activo: Nivel crítico en Tanque A (> ${OVERFLOW_THRESHOLD_PCT}%)`
   }
   if (reason.toLowerCase().includes('overflow_b')) {
-    return 'Interlock de sobrellenado activo: Nivel crítico en Tanque B (> 85%)'
+    return `Interlock de sobrellenado activo: Nivel crítico en Tanque B (> ${OVERFLOW_THRESHOLD_PCT}%)`
   }
   if (reason.toLowerCase().includes('sensor_fault')) {
     return 'Interlock de seguridad activo: Falla o desconexión en las celdas de carga (nivel)'
@@ -151,7 +152,7 @@ export function PumpControl({
             <div className="alert-interlock-warning">
               <AlertTriangleIcon width="16" height="16" />
               <span>
-                {interlockReason ? mapInterlockReason(interlockReason) : 'Interlock de sobrellenado activo (> 85%). Encendido bloqueado.'}
+                {interlockReason ? mapInterlockReason(interlockReason) : `Interlock de sobrellenado activo (> ${OVERFLOW_THRESHOLD_PCT}%). Encendido bloqueado.`}
               </span>
             </div>
           )}

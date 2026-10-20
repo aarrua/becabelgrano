@@ -56,15 +56,13 @@ export function MonitorView() {
   )
   const pumpState = telemetry?.actuators?.['pump'] ?? null
   
-  const tankALevel = telemetry?.tank_a?.level_pct ?? 0
-  const tankBLevel = telemetry?.tank_b?.level_pct ?? 0
-  const isOverflow = tankALevel >= 85.0 || tankBLevel >= 85.0 || alarms['overflow_a'] || alarms['overflow_b']
+  const isOverflow = Boolean(alarms['overflow_a'] || alarms['overflow_b'])
   const isInterlockBlocked = isOverflow || Boolean(alarms['sensor_fault'])
 
   let interlockReason: string | undefined
   if (alarms['sensor_fault']) interlockReason = 'sensor_fault'
-  else if (tankALevel >= 85.0 || alarms['overflow_a']) interlockReason = 'overflow_a'
-  else if (tankBLevel >= 85.0 || alarms['overflow_b']) interlockReason = 'overflow_b'
+  else if (alarms['overflow_a']) interlockReason = 'overflow_a'
+  else if (alarms['overflow_b']) interlockReason = 'overflow_b'
 
   return (
     <div className="monitor-container">

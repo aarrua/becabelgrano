@@ -1,4 +1,5 @@
 import { TankTelemetry } from '../types/telemetry'
+import { OVERFLOW_THRESHOLD_PCT } from '../config/interlock'
 import { ThermometerIcon, ScaleIcon, AlertTriangleIcon, CheckCircleIcon } from './Icons'
 
 interface TankProps {
@@ -11,7 +12,7 @@ interface TankProps {
 
 function TankCylinder({ name, subtitle, telemetry, isOverflow, isAlarmActive }: TankProps) {
   const level = Math.max(0, Math.min(100, telemetry.level_pct ?? 0))
-  const isHigh = level >= 85.0 || isOverflow || isAlarmActive
+  const isHigh = isOverflow || isAlarmActive
 
   return (
     <div className={`tank-card ${isHigh ? 'tank-warning' : ''}`}>
@@ -24,7 +25,7 @@ function TankCylinder({ name, subtitle, telemetry, isOverflow, isAlarmActive }: 
           {isHigh ? (
             <>
               <AlertTriangleIcon width="14" height="14" />
-              <span>{level >= 85.0 ? 'Sobrellenado' : 'Alarma'}</span>
+              <span>{isOverflow ? 'Sobrellenado' : 'Alarma'}</span>
             </>
           ) : (
             <>
@@ -54,8 +55,8 @@ function TankCylinder({ name, subtitle, telemetry, isOverflow, isAlarmActive }: 
             <span className="ruler-label">100%</span>
             <span className="ruler-tick" />
           </div>
-          <div className="ruler-mark r-85">
-            <span className="ruler-label ruler-label-alert">85%</span>
+          <div className="ruler-mark" style={{ top: `${100 - OVERFLOW_THRESHOLD_PCT}%` }}>
+            <span className="ruler-label ruler-label-alert">{OVERFLOW_THRESHOLD_PCT}%</span>
             <span className="ruler-tick ruler-tick-alert" />
           </div>
           <div className="ruler-mark r-75">
@@ -78,9 +79,13 @@ function TankCylinder({ name, subtitle, telemetry, isOverflow, isAlarmActive }: 
 
         {/* Cilindro transparente con líquido */}
         <div className="cylinder-body">
-          {/* Línea de umbral de interlock al 85% */}
-          <div className="interlock-threshold-line" title="Umbral de corte de interlock (85.0%)">
-            <span className="threshold-tag">Corte 85%</span>
+          {/* Línea de umbral de interlock (VITE_OVERFLOW_THRESHOLD_PCT) */}
+          <div
+            className="interlock-threshold-line"
+            style={{ bottom: `${OVERFLOW_THRESHOLD_PCT}%` }}
+            title={`Umbral de corte de interlock (${OVERFLOW_THRESHOLD_PCT}%)`}
+          >
+            <span className="threshold-tag">Corte {OVERFLOW_THRESHOLD_PCT}%</span>
           </div>
 
           {/* Nivel de fluido */}
