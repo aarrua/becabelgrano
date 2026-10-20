@@ -17,6 +17,11 @@ static CalibracionData s_cal;
 static bool s_desde_eeprom = false;
 static uint8_t s_sesion = 0;
 
+// Las comparaciones afirmativas rechazan también NaN (toda comparación con NaN es falsa).
+static bool en_rango(float v, float min_v, float max_v) {
+    return (v >= min_v && v <= max_v);
+}
+
 static uint16_t calcular_checksum(const CalibracionData &data) {
     const uint8_t *p = (const uint8_t *)&data;
     size_t len = sizeof(CalibracionData) - sizeof(data.checksum);
@@ -79,23 +84,18 @@ void calibracion_set_tare_b(long tare) {
     s_sesion |= CAL_SESION_TARE_B;
 }
 
-void calibracion_set_scale_a(float scale) {
-    if (scale > 0.0001f) {
-        s_cal.scale_a = scale;
-        s_sesion |= CAL_SESION_SCALE_A;
-    }
+bool calibracion_set_scale_a(float scale) {
+    if (!en_rango(scale, CAL_SCALE_MIN, CAL_SCALE_MAX)) return false;
+    s_cal.scale_a = scale;
+    s_sesion |= CAL_SESION_SCALE_A;
+    return true;
 }
 
-void calibracion_set_scale_b(float scale) {
-    if (scale > 0.0001f) {
-        s_cal.scale_b = scale;
-        s_sesion |= CAL_SESION_SCALE_B;
-    }
-}
-
-// Las comparaciones afirmativas rechazan también NaN (toda comparación con NaN es falsa).
-static bool en_rango(float v, float min_v, float max_v) {
-    return (v >= min_v && v <= max_v);
+bool calibracion_set_scale_b(float scale) {
+    if (!en_rango(scale, CAL_SCALE_MIN, CAL_SCALE_MAX)) return false;
+    s_cal.scale_b = scale;
+    s_sesion |= CAL_SESION_SCALE_B;
+    return true;
 }
 
 bool calibracion_set_capacity_a(float gramos) {

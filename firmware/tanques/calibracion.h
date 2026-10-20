@@ -8,6 +8,9 @@
 // desde caudalímetros lentos (~100 pulsos/L) hasta YF-S401 (~5880 pulsos/L).
 #define CAL_CAPACIDAD_MIN_G   100.0f
 #define CAL_CAPACIDAD_MAX_G   10000.0f
+// Escala del HX711 en cuentas por gramo (típico ~420 con celda de 10 kg).
+#define CAL_SCALE_MIN         1.0f
+#define CAL_SCALE_MAX         100000.0f
 #define CAL_FLOW_K_MIN        10.0f
 #define CAL_FLOW_K_MAX        10000.0f
 // Capacidad por defecto: por debajo de la del cilindro físico más chico (2450 g),
@@ -64,13 +67,16 @@ void calibracion_set_tare_b(long tare);
 
 /**
  * Establece el factor de escala (cuentas/g) de la celda A en RAM.
+ * @return false (sin modificar nada) si es NaN, infinito o está fuera de
+ *         [CAL_SCALE_MIN, CAL_SCALE_MAX].
  */
-void calibracion_set_scale_a(float scale);
+bool calibracion_set_scale_a(float scale);
 
 /**
  * Establece el factor de escala (cuentas/g) de la celda B en RAM.
+ * @return false (sin modificar nada) si es inválido (ver celda A).
  */
-void calibracion_set_scale_b(float scale);
+bool calibracion_set_scale_b(float scale);
 
 /**
  * Establece la capacidad máxima (g) del tanque A en RAM.

@@ -320,16 +320,15 @@ static void procesar_comando_linea(const char *line) {
         float scale = 0.0f;
         if (extract_json_string(line, "tank", tank, sizeof(tank)) &&
             extract_json_float(line, "scale", scale)) {
-            if (scale > 0.0001f) {
-                if (strcmp(tank, "a") == 0) {
-                    calibracion_set_scale_a(scale);
-                    responder_ack(ack_id, true, nullptr);
-                    return;
-                } else if (strcmp(tank, "b") == 0) {
-                    calibracion_set_scale_b(scale);
-                    responder_ack(ack_id, true, nullptr);
-                    return;
-                }
+            bool ok = false;
+            if (strcmp(tank, "a") == 0) {
+                ok = calibracion_set_scale_a(scale);
+            } else if (strcmp(tank, "b") == 0) {
+                ok = calibracion_set_scale_b(scale);
+            }
+            if (ok) {
+                responder_ack(ack_id, true, nullptr);
+                return;
             }
         }
         responder_ack(ack_id, false, "invalid_scale");
