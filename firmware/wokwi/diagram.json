@@ -162,6 +162,33 @@
       "top": -130,
       "left": 660,
       "attrs": {}
+    },
+    {
+      "type": "wokwi-hx711",
+      "id": "celdaA",
+      "top": 200,
+      "left": -200,
+      "attrs": {
+        "type": "5kg"
+      }
+    },
+    {
+      "type": "wokwi-hx711",
+      "id": "celdaB",
+      "top": 200,
+      "left": -60,
+      "attrs": {
+        "type": "5kg"
+      }
+    },
+    {
+      "type": "wokwi-clock-generator",
+      "id": "flujo1",
+      "top": 200,
+      "left": 120,
+      "attrs": {
+        "frequency": "16"
+      }
     }
   ],
   "connections": [
@@ -511,6 +538,60 @@
       "npb7:VSS",
       "uno:GND.1",
       "black",
+      []
+    ],
+    [
+      "uno:5V",
+      "celdaA:VCC",
+      "red",
+      []
+    ],
+    [
+      "uno:GND.1",
+      "celdaA:GND",
+      "black",
+      []
+    ],
+    [
+      "uno:4",
+      "celdaA:DT",
+      "green",
+      []
+    ],
+    [
+      "uno:5",
+      "celdaA:SCK",
+      "yellow",
+      []
+    ],
+    [
+      "uno:5V",
+      "celdaB:VCC",
+      "red",
+      []
+    ],
+    [
+      "uno:GND.1",
+      "celdaB:GND",
+      "black",
+      []
+    ],
+    [
+      "uno:6",
+      "celdaB:DT",
+      "green",
+      []
+    ],
+    [
+      "uno:7",
+      "celdaB:SCK",
+      "yellow",
+      []
+    ],
+    [
+      "flujo1:CLK",
+      "uno:2",
+      "cyan",
       []
     ]
   ],

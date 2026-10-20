@@ -191,6 +191,11 @@ y este proyecto adhiere a [Conventional Commits](https://www.conventionalcommits
 - **SPA**: `isOverflow` depende solo de `alarms.overflow_a/overflow_b`; etiqueta, línea y texto "Corte" usan `VITE_OVERFLOW_THRESHOLD_PCT` (default 85, ver `frontend/.env.example`).
 - **`AGENTS.md`**: checklist para cambiar el umbral de overflow y el de rearme en todos los componentes.
 
+### Changed - Diagrama y documentación de Wokwi
+- `firmware/wokwi/diagram.json`: se agregan dos `wokwi-hx711` tipo `5kg` (`celdaA` en D4/D5, `celdaB` en D6/D7, VCC a 5 V) y un `wokwi-clock-generator` a 16 Hz en D2 como caudalímetro emulado. El resto del diagrama no cambia. Sin verificar en Wokwi.
+- `docs/04-hardware.md` 6.1: se corrige la afirmación de que Wokwi no tiene HX711; cada ítem indica si se verificó en la documentación de Wokwi o no.
+- `firmware/wokwi/README.md`: pasos para cargar el firmware completo y `libraries.txt` en el navegador, y la limitación de la escala (`cal_scale` acepta de 1 a 100000 cuentas/g; Wokwi entrega unas 0,42 cuentas/g, así que no se puede calibrar sin un cambio de compilación, que no se hizo).
+
 ### Changed
 - Reemplazada en `firmware/GUIA_PRUEBAS_HARDWARE.md` la indicación de editar `calibracion.cpp` por los nuevos comandos de capacidad y factor K.
 
