@@ -174,6 +174,13 @@ y este proyecto adhiere a [Conventional Commits](https://www.conventionalcommits
 - **Consumo medido con `arduino-cli`**: Flash 17504 bytes (54%) y RAM global 799 bytes (39%).
 - Informe y decisiones: `docs/INFORME-6.md`, `docs/DECISIONES-6.md`.
 
+### Fixed - Revisión de seguridad del firmware (Etapa 6)
+- Fail-safe: la bomba se apaga y `sensor_fault` queda en `true` si algún nivel pasa a inválido.
+- Plausibilidad HX711 (crudo saturado o peso < -50 g invalidan la lectura); los pesos negativos ya no se recortan a 0.
+- Capacidad por defecto 2000 g y flag de calibración: el encendido (y `save_cal`) se rechaza con `reason: "not_calibrated"` salvo `PERMITIR_BOMBA_SIN_CALIBRAR=1` (solo lámpara). Nuevo motivo documentado en `docs/01-contrato-datos.md`; la SPA lo muestra con mensaje propio.
+- `cal_scale` validado por rango (`invalid_scale`); `tare` responde `sensor_not_ready` si el HX711 no está listo; relé forzado a apagado antes de `pinMode(OUTPUT)`; ids de hasta 36 caracteres (buffer de recepción de 128 bytes).
+- Propuestas no implementadas (histéresis 85/80 %, falla de DS18B20 sin bloquear la bomba) y todas las decisiones en `docs/DECISIONES-6.md`; casos de prueba en `firmware/GUIA_PRUEBAS_HARDWARE.md`, sección 7.
+
 ### Changed
 - Reemplazada en `firmware/GUIA_PRUEBAS_HARDWARE.md` la indicación de editar `calibracion.cpp` por los nuevos comandos de capacidad y factor K.
 
