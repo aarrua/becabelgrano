@@ -115,5 +115,10 @@
 // Parámetros Físicos y Umbrales de Seguridad
 // ==============================================================================
 #define OVERFLOW_THRESHOLD_PCT    85.0f
+// Histéresis: la bandera de sobrellenado de un tanque se activa al llegar a
+// OVERFLOW_THRESHOLD_PCT y recién se desactiva cuando su nivel baja de este valor.
+// Entre ambos valores conserva el estado previo (y el encendido sigue rechazado).
+// Con nivel inválido la bandera queda activa. Debe ser menor que el umbral.
+#define OVERFLOW_REARME_PCT       80.0f
 
 #endif // CONFIG_H

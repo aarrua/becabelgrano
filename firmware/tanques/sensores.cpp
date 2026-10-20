@@ -20,6 +20,22 @@ static long s_raw_hx711_a = 0;
 static long s_raw_hx711_b = 0;
 
 #if !MODO_SIM_SIN_SENSORES
+// Banderas de sobrellenado con histéresis. Arrancan activas (fail-safe) hasta la
+// primera lectura válida bajo OVERFLOW_REARME_PCT.
+static bool s_overflow_a = true;
+static bool s_overflow_b = true;
+
+/**
+ * Histéresis del interlock: activa al llegar a OVERFLOW_THRESHOLD_PCT, se rearma
+ * solo bajo OVERFLOW_REARME_PCT y con nivel inválido queda activa.
+ */
+static bool actualizar_overflow(bool activo, bool nivel_valido, float nivel_pct) {
+    if (!nivel_valido) return true;
+    if (nivel_pct >= OVERFLOW_THRESHOLD_PCT) return true;
+    if (nivel_pct < OVERFLOW_REARME_PCT) return false;
+    return activo;
+}
+
 static OneWire s_oneWire(PIN_DS18B20);
 static DallasTemperature s_dallas(&s_oneWire);
 static HX711 s_scale_a;
@@ -191,8 +207,10 @@ void sensores_read(LecturasSensores &out) {
     // =========================================================================
     // D. Evaluación de Interlocks de Seguridad
     // =========================================================================
-    out.overflow_a = (out.tank_a_level_valid && out.tank_a_level_pct >= OVERFLOW_THRESHOLD_PCT);
-    out.overflow_b = (out.tank_b_level_valid && out.tank_b_level_pct >= OVERFLOW_THRESHOLD_PCT);
+    s_overflow_a = actualizar_overflow(s_overflow_a, out.tank_a_level_valid, out.tank_a_level_pct);
+    s_overflow_b = actualizar_overflow(s_overflow_b, out.tank_b_level_valid, out.tank_b_level_pct);
+    out.overflow_a = s_overflow_a;
+    out.overflow_b = s_overflow_b;
     out.sensor_fault = fault;
 
     // Corte preventivo por hardware si hay sobrellenado activo
