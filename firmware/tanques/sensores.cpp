@@ -194,6 +194,15 @@ void sensores_read(LecturasSensores &out) {
             actuadores_set_bomba(false);
         }
     }
+
+    // Fail-safe: sin nivel válido en algún tanque no se puede vigilar el sobrellenado,
+    // así que la bomba no puede seguir encendida (cable cortado, HX711 caído, etc.).
+    if (!out.tank_a_level_valid || !out.tank_b_level_valid) {
+        out.sensor_fault = true;
+        if (actuadores_get_bomba()) {
+            actuadores_set_bomba(false);
+        }
+    }
 #endif
 
     s_last_lecturas = out;
