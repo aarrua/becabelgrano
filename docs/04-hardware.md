@@ -95,13 +95,15 @@ El refresco es no bloqueante: `show()` se llama solo cuando cambia la imagen y a
 
 ## 6. Simulación en Wokwi (Sub-etapa 6.4)
 
-Archivos en `firmware/wokwi/`: `diagram.json` (Uno, DS18B20 con resistencia pull-up de 4,7 kΩ, relé y NeoPixel) y `wokwi.toml`. Sirve para revisar la lógica de comandos, el relé, la alarma de watchdog y las barras NeoPixel sin hardware. Ver `firmware/wokwi/README.md`.
+Archivos en `firmware/wokwi/`: `diagram.json` (Uno, DS18B20 con resistencia pull-up de 4,7 kΩ, relé, NeoPixel, dos `wokwi-hx711` y un `wokwi-clock-generator` como caudalímetro) y `wokwi.toml`. Sirve para revisar la lógica de comandos, el relé, la alarma de watchdog y las barras NeoPixel sin hardware. Ver `firmware/wokwi/README.md`.
 
-### 6.1 Qué NO simula Wokwi
+### 6.1 Qué simula y qué NO simula Wokwi
 
-- **HX711 con celda de carga real**: no hay modelo del conjunto celda + HX711 equivalente al kit. Sin el HX711 conectado, `is_ready()` es falso y el firmware informa `sensor_fault` con pesos y niveles `null`. Por eso la simulación no valida tara, escala, capacidad ni los interlocks de sobrellenado.
-- **Caudalímetro de efecto Hall**: no se incluye en el diagrama; el pin `D2` queda sin pulsos y `flow_lpm` vale `0.00`. La calibración del factor K requiere el sensor real.
-- **Bomba y circuito hidráulico**: el relé solo conmuta un LED/indicador, no hay dinámica de tanques.
-- **Temporización eléctrica real** (ruido, caída de tensión, corriente de las tiras, pérdida de bytes seriales durante `show()`).
+Cada ítem indica si se **verificó en la documentación de Wokwi** (docs.wokwi.com, consultada al redactar esto) o si **no está verificado**. Nada de esto se probó abriendo Wokwi.
+
+- **HX711 y celdas de carga**: Wokwi tiene la pieza `wokwi-hx711` (*verificado en la documentación*). Admite `type` `"5kg"`, `"50kg"` (por defecto) y `"gauge"`, se alimenta con VCC a 5 V, expone `DT` y `SCK` y entrega lecturas crudas de 0 a 2100 (`5kg`) y de 0 a 21000 (`50kg`); la carga se fija en kg desde la simulación. La página aclara que el chip no implementa el canal B ni las ganancias 32/64. El diagrama usa dos piezas `5kg`. **No verificado**: que la librería `HX711 0.7.5` del firmware funcione con la pieza (lo esperable es que sí) y que el rango de 0 a 2100 no dispare la plausibilidad. Ver la limitación de la escala en `firmware/wokwi/README.md`: la pieza no reproduce las cuentas/g del kit real, así que no valida la calibración física, la capacidad ni los interlocks con el kit.
+- **Caudalímetro de efecto Hall**: Wokwi no tiene una pieza propia (*verificado*: no figura en la lista de hardware soportado). Se emula con `wokwi-clock-generator` (existe, *verificado*; atributo `frequency`, pin `CLK`) conectado a `D2`. Que la documentación proponga el generador como fuente de pulsos para un caudalímetro **no está verificado**: es una decisión de este proyecto. Con 16 Hz y el factor K por defecto (450 pulsos/L) el firmware debería informar unos 2,1 L/min (cálculo propio, no verificado en Wokwi). Eso no valida el factor K del sensor real.
+- **Bomba y circuito hidráulico**: el relé solo conmuta un LED/indicador, no hay dinámica de tanques (no hay pieza de Wokwi que la modele; *no verificado*).
+- **Temporización eléctrica real** (ruido, caída de tensión, corriente de las tiras, pérdida de bytes seriales durante `show()`): *no verificado*; no se espera que se modele.
 - **Dirección ROM del DS18B20 real**: el firmware usa direcciones de ejemplo y recurre a la lectura por índice, que es lo que funciona en Wokwi.
 
