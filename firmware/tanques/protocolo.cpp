@@ -300,8 +300,8 @@ static void procesar_comando_linea(const char *line) {
             bool es_a = (strcmp(tank, "a") == 0);
             if (es_a || strcmp(tank, "b") == 0) {
                 long raw = 0;
-                // Con el HX711 no listo o saturado no se toca la tara vigente
-                bool leido = es_a ? sensores_leer_raw_a(raw) : sensores_leer_raw_b(raw);
+                // Promedio de varias muestras; si alguna falla no se toca la tara vigente
+                bool leido = es_a ? sensores_promediar_raw_a(raw) : sensores_promediar_raw_b(raw);
                 if (!leido) {
                     responder_ack(ack_id, false, "sensor_not_ready");
                     return;

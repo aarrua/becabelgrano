@@ -238,28 +238,37 @@ const LecturasSensores& sensores_get_last() {
 }
 
 #if !MODO_SIM_SIN_SENSORES
-static bool leer_raw(HX711 &hx, long &store, long &out_raw) {
-    if (!hx.is_ready()) return false;
-    long raw = hx.read();
-    if (raw >= HX711_RAW_SATURADO || raw <= -HX711_RAW_SATURADO) return false;
-    store = raw;
-    out_raw = raw;
+static bool promediar_raw(HX711 &hx, long &store, long &out_raw) {
+    unsigned long inicio = millis();
+    long suma = 0;
+    long ultimo = 0;
+    for (uint8_t i = 0; i < HX711_TARE_MUESTRAS; i++) {
+        while (!hx.is_ready()) {
+            if (millis() - inicio >= HX711_TARE_TIMEOUT_MS) return false;
+        }
+        long raw = hx.read();
+        if (raw >= HX711_RAW_SATURADO || raw <= -HX711_RAW_SATURADO) return false;
+        suma += raw;
+        ultimo = raw;
+    }
+    store = ultimo;
+    out_raw = suma / HX711_TARE_MUESTRAS;
     return true;
 }
 #endif
 
-bool sensores_leer_raw_a(long &out_raw) {
+bool sensores_promediar_raw_a(long &out_raw) {
 #if !MODO_SIM_SIN_SENSORES
-    return leer_raw(s_scale_a, s_raw_hx711_a, out_raw);
+    return promediar_raw(s_scale_a, s_raw_hx711_a, out_raw);
 #else
     (void)out_raw;
     return false;
 #endif
 }
 
-bool sensores_leer_raw_b(long &out_raw) {
+bool sensores_promediar_raw_b(long &out_raw) {
 #if !MODO_SIM_SIN_SENSORES
-    return leer_raw(s_scale_b, s_raw_hx711_b, out_raw);
+    return promediar_raw(s_scale_b, s_raw_hx711_b, out_raw);
 #else
     (void)out_raw;
     return false;

@@ -47,16 +47,17 @@ void sensores_read(LecturasSensores &out_lecturas);
 const LecturasSensores& sensores_get_last();
 
 /**
- * Lee las cuentas crudas del HX711 del Tanque A (para tara y calibración).
- * @return false (y no escribe out_raw) si el HX711 no está listo, si no hay
- *         sensores (MODO_SIM_SIN_SENSORES) o si el valor está saturado.
+ * Promedia HX711_TARE_MUESTRAS lecturas crudas del HX711 del Tanque A (para tara).
+ * Bloquea hasta HX711_TARE_TIMEOUT_MS en total.
+ * @return false (y no escribe out_raw) si alguna muestra no llega a tiempo, está
+ *         saturada o no hay sensores (MODO_SIM_SIN_SENSORES).
  */
-bool sensores_leer_raw_a(long &out_raw);
+bool sensores_promediar_raw_a(long &out_raw);
 
 /**
  * Ídem para el Tanque B.
  */
-bool sensores_leer_raw_b(long &out_raw);
+bool sensores_promediar_raw_b(long &out_raw);
 
 /**
  * Retorna true si el interlock de sobrellenado en Tanque A está activo.

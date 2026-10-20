@@ -186,7 +186,7 @@ El parser de comandos implementado en `protocolo.cpp` opera con buffers estátic
 ### 6.3 bis Límite de `id` y motivos de rechazo nuevos
 
 - El `id` admite hasta **36 caracteres**; el buffer de recepción es de 128 bytes (cabe el campo `ts` del bridge).
-- `not_calibrated`: encendido (o `save_cal`) rechazado porque no hay calibración confiable. `invalid_scale`, `invalid_capacity`, `invalid_flow_k`: valor fuera de rango. `sensor_not_ready`: `tare` con HX711 no listo o saturado. Ver `docs/01-contrato-datos.md`, sección 4.3.
+- `not_calibrated`: encendido (o `save_cal`) rechazado porque no hay calibración confiable. `invalid_scale`, `invalid_capacity`, `invalid_flow_k`: valor fuera de rango. `sensor_not_ready`: `tare` con alguna muestra del HX711 no lista (hasta ~1,1 s) o saturada. La tara promedia 10 muestras y bloquea el loop durante ese lapso. Ver `docs/01-contrato-datos.md`, sección 4.3.
 - `PERMITIR_BOMBA_SIN_CALIBRAR` (`config.h`, `0` por defecto) deshabilita el rechazo `not_calibrated` solo para pruebas del relé con lámpara.
 
 ### 6.4 Confirmación / Rechazo de Comando (Arduino Uno $\to$ Raspberry Pi)

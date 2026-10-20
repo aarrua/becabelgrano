@@ -87,6 +87,12 @@
 // Peso mínimo creíble en gramos. Por debajo se considera lectura inválida
 // (tara mal fijada, celda invertida o falla) y se levanta sensor_fault.
 #define HX711_PESO_MIN_PLAUSIBLE_G (-50.0f)
+// Tara: promedio de HX711_TARE_MUESTRAS lecturas. Bloquea el loop hasta
+// HX711_TARE_TIMEOUT_MS en total (con el HX711 a 10 Hz las 10 muestras tardan ~1 s;
+// a 80 Hz, ~125 ms). Si alguna muestra no está lista a tiempo o está saturada,
+// la tara se rechaza con sensor_not_ready y no se modifica.
+#define HX711_TARE_MUESTRAS        10
+#define HX711_TARE_TIMEOUT_MS      1100UL
 
 // ==============================================================================
 // Watchdog de Seguridad de Bomba (Tiempo Máximo de Bombeo Continuo)

@@ -363,7 +363,7 @@ Hacer estas pruebas con la **bomba real desconectada** (usar una lámpara o el L
 Enviar `{"id":"s1","cmd":"cal_scale","tank":"a","scale":0}`, `"scale":-5`, `"scale":1e999` y `"scale":200000`. **Esperado**: `{"ack":"s1","ok":false,"reason":"invalid_scale"}` en todos y la escala vigente sin cambios.
 
 ### Caso 7.7: `tare` con el HX711 no listo
-Desconectar el HX711 del Tanque A y enviar `{"id":"t1","cmd":"tare","tank":"a"}`. **Esperado**: `{"ack":"t1","ok":false,"reason":"sensor_not_ready"}`; al reconectar, la tara anterior sigue vigente hasta un `tare` exitoso.
+El `tare` promedia 10 muestras (`HX711_TARE_MUESTRAS`) y puede tardar hasta ~1 s con el HX711 a 10 Hz; el ack llega recién al terminar. Desconectar el HX711 del Tanque A y enviar `{"id":"t1","cmd":"tare","tank":"a"}`. **Esperado**: `{"ack":"t1","ok":false,"reason":"sensor_not_ready"}`; al reconectar, la tara anterior sigue vigente hasta un `tare` exitoso.
 
 ### Caso 7.8: Ids largos
 Enviar un `set` con `id` de 36 caracteres (`"id":"123e4567-e89b-12d3-a456-426614174000"`) con el campo `"ts"` incluido. **Esperado**: el ack vuelve con el mismo `id` completo.
