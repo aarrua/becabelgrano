@@ -47,14 +47,16 @@ void sensores_read(LecturasSensores &out_lecturas);
 const LecturasSensores& sensores_get_last();
 
 /**
- * Retorna las cuentas crudas del convertidor HX711 del Tanque A (para calibración).
+ * Lee las cuentas crudas del HX711 del Tanque A (para tara y calibración).
+ * @return false (y no escribe out_raw) si el HX711 no está listo, si no hay
+ *         sensores (MODO_SIM_SIN_SENSORES) o si el valor está saturado.
  */
-long sensores_get_raw_hx711_a();
+bool sensores_leer_raw_a(long &out_raw);
 
 /**
- * Retorna las cuentas crudas del convertidor HX711 del Tanque B (para calibración).
+ * Ídem para el Tanque B.
  */
-long sensores_get_raw_hx711_b();
+bool sensores_leer_raw_b(long &out_raw);
 
 /**
  * Retorna true si el interlock de sobrellenado en Tanque A está activo.

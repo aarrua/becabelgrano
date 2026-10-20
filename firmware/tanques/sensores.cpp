@@ -219,22 +219,33 @@ const LecturasSensores& sensores_get_last() {
     return s_last_lecturas;
 }
 
-long sensores_get_raw_hx711_a() {
 #if !MODO_SIM_SIN_SENSORES
-    if (s_scale_a.is_ready()) {
-        s_raw_hx711_a = s_scale_a.read();
-    }
+static bool leer_raw(HX711 &hx, long &store, long &out_raw) {
+    if (!hx.is_ready()) return false;
+    long raw = hx.read();
+    if (raw >= HX711_RAW_SATURADO || raw <= -HX711_RAW_SATURADO) return false;
+    store = raw;
+    out_raw = raw;
+    return true;
+}
 #endif
-    return s_raw_hx711_a;
+
+bool sensores_leer_raw_a(long &out_raw) {
+#if !MODO_SIM_SIN_SENSORES
+    return leer_raw(s_scale_a, s_raw_hx711_a, out_raw);
+#else
+    (void)out_raw;
+    return false;
+#endif
 }
 
-long sensores_get_raw_hx711_b() {
+bool sensores_leer_raw_b(long &out_raw) {
 #if !MODO_SIM_SIN_SENSORES
-    if (s_scale_b.is_ready()) {
-        s_raw_hx711_b = s_scale_b.read();
-    }
+    return leer_raw(s_scale_b, s_raw_hx711_b, out_raw);
+#else
+    (void)out_raw;
+    return false;
 #endif
-    return s_raw_hx711_b;
 }
 
 bool sensores_get_overflow_a() {

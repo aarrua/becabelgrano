@@ -297,12 +297,20 @@ static void procesar_comando_linea(const char *line) {
     if (strcmp(cmd_name, "tare") == 0) {
         char tank[8];
         if (extract_json_string(line, "tank", tank, sizeof(tank))) {
-            if (strcmp(tank, "a") == 0) {
-                calibracion_set_tare_a(sensores_get_raw_hx711_a());
-                responder_ack(ack_id, true, nullptr);
-                return;
-            } else if (strcmp(tank, "b") == 0) {
-                calibracion_set_tare_b(sensores_get_raw_hx711_b());
+            bool es_a = (strcmp(tank, "a") == 0);
+            if (es_a || strcmp(tank, "b") == 0) {
+                long raw = 0;
+                // Con el HX711 no listo o saturado no se toca la tara vigente
+                bool leido = es_a ? sensores_leer_raw_a(raw) : sensores_leer_raw_b(raw);
+                if (!leido) {
+                    responder_ack(ack_id, false, "sensor_not_ready");
+                    return;
+                }
+                if (es_a) {
+                    calibracion_set_tare_a(raw);
+                } else {
+                    calibracion_set_tare_b(raw);
+                }
                 responder_ack(ack_id, true, nullptr);
                 return;
             }
