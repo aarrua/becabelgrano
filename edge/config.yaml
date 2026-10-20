@@ -33,6 +33,7 @@ thermal:
 # Umbrales e interlocks de seguridad
 interlocks:
   overflow_threshold_pct: 85.0 # Corte de seguridad automático por sobrellenado (aplica a CUALQUIERA de los dos tanques)
+  overflow_rearm_pct: 80.0     # Histéresis: la alarma de sobrellenado se rearma recién cuando el nivel baja de este valor
   dry_run_prevention: false    # Futura protección contra funcionamiento en seco
 
 # Ruido instrumental simulado (desviación estándar gaussiana)
