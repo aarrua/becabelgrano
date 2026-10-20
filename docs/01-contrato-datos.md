@@ -70,11 +70,11 @@ La telemetría se emite a una tasa nominal de **1 Hz (1 trama por segundo)**.
 | `seq` | Integer | - | `0` a `4294967295` | Número de secuencia incremental para detectar pérdidas de tramas. |
 | `uptime_ms` | Integer | ms | $\ge 0$ | Milisegundos transcurridos desde el arranque del Arduino Uno. |
 | **`tank_a`** | Object | - | - | Mediciones del Tanque A (tanque superior). |
-| `tank_a.weight_g` | Float | g (gramos) | `0.0` a `5000.0` | Masa líquida neta calculada por celda de carga tarada. |
+| `tank_a.weight_g` | Float | g (gramos) | `0.0` a `5000.0` | Masa líquida neta calculada por celda de carga tarada. Puede ser levemente negativa (hasta -50 g, deriva de tara); por debajo la lectura se invalida (`null` + `sensor_fault`). |
 | `tank_a.level_pct` | Float | % | `0.0` a `100.0` | Nivel relativo de llenado según la capacidad máxima calibrada. |
 | `tank_a.temp_c` | Float | °C | `-10.0` a `80.0` | Temperatura del fluido (sensor sumergido, solo monitoreo). |
 | **`tank_b`** | Object | - | - | Mediciones del Tanque B (tanque inferior). |
-| `tank_b.weight_g` | Float | g (gramos) | `0.0` a `5000.0` | Masa líquida neta calculada por celda de carga tarada. |
+| `tank_b.weight_g` | Float | g (gramos) | `0.0` a `5000.0` | Masa líquida neta calculada por celda de carga tarada. Puede ser levemente negativa (hasta -50 g, deriva de tara); por debajo la lectura se invalida (`null` + `sensor_fault`). |
 | `tank_b.level_pct` | Float | % | `0.0` a `100.0` | Nivel relativo de llenado según la capacidad máxima calibrada. |
 | `tank_b.temp_c` | Float | °C | `-10.0` a `80.0` | Temperatura del fluido (sensor sumergido, solo monitoreo). |
 | `flow_lpm` | Float | L/min | `0.0` a `10.0` | Caudal volumétrico instantáneo medido en la línea de impulsión. |
