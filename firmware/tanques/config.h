@@ -65,6 +65,16 @@
 #endif
 
 // ==============================================================================
+// Plausibilidad de las Celdas de Carga (HX711)
+// ==============================================================================
+// El HX711 entrega 24 bits con signo (±8388607). Un valor crudo cercano a esos
+// extremos indica saturación (cable cortado, celda desconectada o fuera de rango).
+#define HX711_RAW_SATURADO         8388000L
+// Peso mínimo creíble en gramos. Por debajo se considera lectura inválida
+// (tara mal fijada, celda invertida o falla) y se levanta sensor_fault.
+#define HX711_PESO_MIN_PLAUSIBLE_G (-50.0f)
+
+// ==============================================================================
 // Watchdog de Seguridad de Bomba (Tiempo Máximo de Bombeo Continuo)
 // ==============================================================================
 // 1 = Habilitado: apaga automáticamente la bomba si permanece encendida

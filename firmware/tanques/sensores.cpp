@@ -31,6 +31,39 @@ static unsigned long s_last_flow_calc_ms = 0;
 static void flow_sensor_isr() {
     s_flow_pulse_count++;
 }
+
+/**
+ * Lee una celda HX711 y valida plausibilidad. Devuelve false (y deja peso y nivel
+ * inválidos) si el HX711 no está listo, si el valor crudo está saturado
+ * (cable cortado o celda fuera de rango) o si el peso es menor que
+ * HX711_PESO_MIN_PLAUSIBLE_G. Los pesos negativos plausibles NO se recortan a 0
+ * (una deriva de tara negativa debe verse); solo el nivel se acota a >= 0.
+ */
+static bool leer_celda(
+    HX711 &hx, long tare, float scale, float max_w, long &raw_store,
+    float &peso_g, bool &peso_valid, float &nivel_pct, bool &nivel_valid
+) {
+    peso_valid = false;
+    nivel_valid = false;
+    peso_g = 0.0f;
+    nivel_pct = 0.0f;
+
+    if (!hx.is_ready()) return false;
+
+    long raw = hx.read();
+    raw_store = raw;
+    if (raw >= HX711_RAW_SATURADO || raw <= -HX711_RAW_SATURADO) return false;
+
+    float w = (float)(raw - tare) / scale;
+    if (w < HX711_PESO_MIN_PLAUSIBLE_G) return false;
+
+    peso_g = w;
+    peso_valid = true;
+    float lvl = (w / max_w) * 100.0f;
+    nivel_pct = (lvl < 0.0f) ? 0.0f : lvl;
+    nivel_valid = true;
+    return true;
+}
 #endif
 
 void sensores_init() {
@@ -119,45 +152,19 @@ void sensores_read(LecturasSensores &out) {
     // =========================================================================
     // B. Celdas de Carga HX711 (verificación de preparación sin bloqueo)
     // =========================================================================
-    // Tanque A
-    if (s_scale_a.is_ready()) {
-        long raw_a = s_scale_a.read();
-        s_raw_hx711_a = raw_a;
-        float scale = (cal.scale_a > 0.001f) ? cal.scale_a : 420.0f;
-        float wA = (float)(raw_a - cal.tare_a) / scale;
-        if (wA < 0.0f) wA = 0.0f;
-        out.tank_a_weight_g = wA;
-        out.tank_a_weight_valid = true;
+    float max_a = (cal.max_weight_a > 1.0f) ? cal.max_weight_a : 4000.0f;
+    float max_b = (cal.max_weight_b > 1.0f) ? cal.max_weight_b : 2450.0f;
+    float scale_a = (cal.scale_a > 0.001f) ? cal.scale_a : 420.0f;
+    float scale_b = (cal.scale_b > 0.001f) ? cal.scale_b : 420.0f;
 
-        float max_w = (cal.max_weight_a > 1.0f) ? cal.max_weight_a : 4000.0f;
-        float lvlA = (wA / max_w) * 100.0f;
-        if (lvlA < 0.0f) lvlA = 0.0f;
-        out.tank_a_level_pct = lvlA;
-        out.tank_a_level_valid = true;
-    } else {
-        out.tank_a_weight_valid = false;
-        out.tank_a_level_valid = false;
+    if (!leer_celda(s_scale_a, cal.tare_a, scale_a, max_a, s_raw_hx711_a,
+                    out.tank_a_weight_g, out.tank_a_weight_valid,
+                    out.tank_a_level_pct, out.tank_a_level_valid)) {
         fault = true;
     }
-
-    // Tanque B
-    if (s_scale_b.is_ready()) {
-        long raw_b = s_scale_b.read();
-        s_raw_hx711_b = raw_b;
-        float scale = (cal.scale_b > 0.001f) ? cal.scale_b : 420.0f;
-        float wB = (float)(raw_b - cal.tare_b) / scale;
-        if (wB < 0.0f) wB = 0.0f;
-        out.tank_b_weight_g = wB;
-        out.tank_b_weight_valid = true;
-
-        float max_w = (cal.max_weight_b > 1.0f) ? cal.max_weight_b : 2450.0f;
-        float lvlB = (wB / max_w) * 100.0f;
-        if (lvlB < 0.0f) lvlB = 0.0f;
-        out.tank_b_level_pct = lvlB;
-        out.tank_b_level_valid = true;
-    } else {
-        out.tank_b_weight_valid = false;
-        out.tank_b_level_valid = false;
+    if (!leer_celda(s_scale_b, cal.tare_b, scale_b, max_b, s_raw_hx711_b,
+                    out.tank_b_weight_g, out.tank_b_weight_valid,
+                    out.tank_b_level_pct, out.tank_b_level_valid)) {
         fault = true;
     }
 
