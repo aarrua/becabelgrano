@@ -6,10 +6,9 @@
 // ==============================================================================
 // Modo de Operación y Simulación
 // ==============================================================================
-// Si está activo, el firmware emite telemetría con valores null y sensor_fault=true,
-// y conmuta el LED del pin 13 como indicador visual del actuador de bomba.
-// Permite probar el firmware y la comunicación serial con el Arduino Uno solo.
-#define MODO_SIM_SIN_SENSORES 1
+// 0 = Firmware definitivo con lectura real por hardware (Etapa 6.2+).
+// 1 = Modo simulación en banco sin sensores (emite nulls y permite bomba en Uno solo).
+#define MODO_SIM_SIN_SENSORES 0
 
 // ==============================================================================
 // Mapa de Pines - Arduino Uno (ATmega328P)
@@ -39,6 +38,31 @@
 #define PIN_LED_BUILTIN_ACTUADOR 13
 
 // ==============================================================================
+// Direcciones ROM de Sensores DS18B20 (Bus OneWire en pin D8)
+// ==============================================================================
+// Cada sensor DS18B20 tiene una dirección única de 8 bytes (64 bits).
+// Para obtener las direcciones reales de los sensores conectados, ejecute el sketch:
+// 'firmware/utilidades/leer_direcciones/leer_direcciones.ino'.
+#define DS18B20_ADDR_A { 0x28, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x01 }
+#define DS18B20_ADDR_B { 0x28, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF, 0x02 }
+
+// Si está en 1, indica que las direcciones anteriores son de ejemplo
+#define DS18B20_SON_DIRECCIONES_DE_EJEMPLO 1
+
+#if (!MODO_SIM_SIN_SENSORES && DS18B20_SON_DIRECCIONES_DE_EJEMPLO)
+#warning "ATENCIÓN: Se están utilizando direcciones DS18B20 de ejemplo. Ejecute 'firmware/utilidades/leer_direcciones/' para obtener las direcciones reales de sus sensores."
+#endif
+
+// ==============================================================================
+// Watchdog de Seguridad de Bomba (Tiempo Máximo de Bombeo Continuo)
+// ==============================================================================
+// 1 = Habilitado: apaga automáticamente la bomba si permanece encendida
+//     más de PUMP_MAX_RUNTIME_MS continuos sin nuevos comandos recibidos.
+// 0 = Deshabilitado.
+#define WATCHDOG_BOMBA_HABILITADO 1
+#define PUMP_MAX_RUNTIME_MS       60000UL // 60 segundos por defecto
+
+// ==============================================================================
 // Configuración de Lógica de Actuadores
 // ==============================================================================
 // 1 = Relé activo en nivel ALTO (HIGH enciende, LOW apaga)
@@ -49,7 +73,7 @@
 // Parámetros de Comunicación Serial y Temporización
 // ==============================================================================
 #define SERIAL_BAUDRATE           115200
-#define SERIAL_RX_BUFFER_SIZE     96
+#define PROTOCOL_RX_BUFFER_SIZE   96
 #define TELEMETRY_INTERVAL_MS     1000
 
 // ==============================================================================

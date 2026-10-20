@@ -1,9 +1,12 @@
 #include "protocolo.h"
 #include "config.h"
 #include "actuadores.h"
+#include "sensores.h"
+#include "calibracion.h"
 #include <string.h>
+#include <stdlib.h>
 
-static char s_rx_buffer[SERIAL_RX_BUFFER_SIZE];
+static char s_rx_buffer[PROTOCOL_RX_BUFFER_SIZE];
 static uint8_t s_rx_index = 0;
 static bool s_rx_overflow = false;
 
@@ -105,6 +108,8 @@ void protocolo_emitir_telemetria(
     Serial.print(s.overflow_b ? F("true") : F("false"));
     Serial.print(F(",\"sensor_fault\":"));
     Serial.print(s.sensor_fault ? F("true") : F("false"));
+    Serial.print(F(",\"pump_timeout\":"));
+    Serial.print(actuadores_get_pump_timeout() ? F("true") : F("false"));
     Serial.print(F("}"));
 
     // =========================================================================
@@ -210,40 +215,173 @@ static bool extract_json_bool(const char *json, const char *key, bool &out_val) 
     return false;
 }
 
+/**
+ * Parser liviano de números de punto flotante JSON.
+ * Busca `"key"` y parsea el float subsiguiente.
+ */
+static bool extract_json_float(const char *json, const char *key, float &out_val) {
+    if (!json || !key) return false;
+
+    char key_pattern[24];
+    size_t key_len = strlen(key);
+    if (key_len + 3 >= sizeof(key_pattern)) return false;
+    key_pattern[0] = '\"';
+    memcpy(key_pattern + 1, key, key_len);
+    key_pattern[key_len + 1] = '\"';
+    key_pattern[key_len + 2] = '\0';
+
+    const char *p = strstr(json, key_pattern);
+    if (!p) return false;
+    p += key_len + 2;
+
+    while (*p && *p != ':') {
+        p++;
+    }
+    if (*p != ':') return false;
+    p++;
+
+    while (*p && (*p == ' ' || *p == '\t')) {
+        p++;
+    }
+
+    if (*p == '\0' || (*p != '-' && *p != '+' && (*p < '0' || *p > '9'))) {
+        return false;
+    }
+
+    out_val = (float)atof(p);
+    return true;
+}
+
 static void procesar_comando_linea(const char *line) {
     char cmd_id[20];
     char cmd_name[16];
-    char target[16];
-    bool value_bool = false;
 
-    // Extraer id de comando obligatorio
-    if (!extract_json_string(line, "id", cmd_id, sizeof(cmd_id))) {
-        // Sin id identificable: descartar o responder con id desconocido
-        responder_ack("?", false, "unknown_cmd");
+    bool has_id = extract_json_string(line, "id", cmd_id, sizeof(cmd_id));
+    const char *ack_id = has_id ? cmd_id : "cal";
+
+    // Extraer cmd obligatorio
+    if (!extract_json_string(line, "cmd", cmd_name, sizeof(cmd_name))) {
+        responder_ack(has_id ? cmd_id : "?", false, "unknown_cmd");
         return;
     }
 
-    // Extraer cmd ("set")
-    if (!extract_json_string(line, "cmd", cmd_name, sizeof(cmd_name)) || strcmp(cmd_name, "set") != 0) {
-        responder_ack(cmd_id, false, "unknown_cmd");
+    // =========================================================================
+    // Comando: {"cmd":"save_cal"}
+    // Persiste parámetros de calibración vigentes en EEPROM con checksum.
+    // =========================================================================
+    if (strcmp(cmd_name, "save_cal") == 0) {
+        calibracion_save_eeprom();
+        responder_ack(ack_id, true, nullptr);
         return;
     }
 
-    // Extraer target ("pump")
-    if (!extract_json_string(line, "target", target, sizeof(target)) || strcmp(target, "pump") != 0) {
-        responder_ack(cmd_id, false, "unknown_cmd");
+    // =========================================================================
+    // Comando: {"cmd":"reset_cal"}
+    // Restaura parámetros por defecto en RAM sin persistir en EEPROM.
+    // =========================================================================
+    if (strcmp(cmd_name, "reset_cal") == 0) {
+        calibracion_reset_defaults();
+        responder_ack(ack_id, true, nullptr);
         return;
     }
 
-    // Extraer value (true/false)
-    if (!extract_json_bool(line, "value", value_bool)) {
-        responder_ack(cmd_id, false, "malformed_cmd");
+    // =========================================================================
+    // Comando: {"cmd":"tare","tank":"a"|"b"}
+    // Fija offset de tara para la celda correspondiente en RAM.
+    // =========================================================================
+    if (strcmp(cmd_name, "tare") == 0) {
+        char tank[8];
+        if (extract_json_string(line, "tank", tank, sizeof(tank))) {
+            if (strcmp(tank, "a") == 0) {
+                calibracion_set_tare_a(sensores_get_raw_hx711_a());
+                responder_ack(ack_id, true, nullptr);
+                return;
+            } else if (strcmp(tank, "b") == 0) {
+                calibracion_set_tare_b(sensores_get_raw_hx711_b());
+                responder_ack(ack_id, true, nullptr);
+                return;
+            }
+        }
+        responder_ack(ack_id, false, "invalid_tank");
         return;
     }
 
-    // Ejecución segura del comando
-    actuadores_set_bomba(value_bool);
-    responder_ack(cmd_id, true, nullptr);
+    // =========================================================================
+    // Comando: {"cmd":"cal_scale","tank":"a"|"b","scale":420.5}
+    // Fija factor de escala (cuentas/g) para la celda de carga en RAM.
+    // =========================================================================
+    if (strcmp(cmd_name, "cal_scale") == 0) {
+        char tank[8];
+        float scale = 0.0f;
+        if (extract_json_string(line, "tank", tank, sizeof(tank)) &&
+            extract_json_float(line, "scale", scale)) {
+            if (scale > 0.0001f) {
+                if (strcmp(tank, "a") == 0) {
+                    calibracion_set_scale_a(scale);
+                    responder_ack(ack_id, true, nullptr);
+                    return;
+                } else if (strcmp(tank, "b") == 0) {
+                    calibracion_set_scale_b(scale);
+                    responder_ack(ack_id, true, nullptr);
+                    return;
+                }
+            }
+        }
+        responder_ack(ack_id, false, "invalid_scale");
+        return;
+    }
+
+    // =========================================================================
+    // Comando: {"id":"c1","cmd":"set","target":"pump","value":true|false}
+    // Control de actuadores físicos con interlocks y watchdog.
+    // =========================================================================
+    if (strcmp(cmd_name, "set") == 0) {
+        if (!has_id) {
+            responder_ack("?", false, "missing_id");
+            return;
+        }
+
+        char target[16];
+        bool value_bool = false;
+
+        // Extraer target ("pump")
+        if (!extract_json_string(line, "target", target, sizeof(target)) || strcmp(target, "pump") != 0) {
+            responder_ack(cmd_id, false, "unknown_cmd");
+            return;
+        }
+
+        // Extraer value (true/false)
+        if (!extract_json_bool(line, "value", value_bool)) {
+            responder_ack(cmd_id, false, "malformed_cmd");
+            return;
+        }
+
+        if (value_bool) {
+#if !MODO_SIM_SIN_SENSORES
+            if (sensores_get_sensor_fault()) {
+                responder_ack(cmd_id, false, "sensor_fault");
+                return;
+            }
+            if (sensores_get_overflow_a()) {
+                responder_ack(cmd_id, false, "overflow_a");
+                return;
+            }
+            if (sensores_get_overflow_b()) {
+                responder_ack(cmd_id, false, "overflow_b");
+                return;
+            }
+#endif
+            actuadores_set_bomba(true);
+        } else {
+            // Apagar siempre permitido
+            actuadores_set_bomba(false);
+        }
+
+        responder_ack(cmd_id, true, nullptr);
+        return;
+    }
+
+    responder_ack(ack_id, false, "unknown_cmd");
 }
 
 void protocolo_procesar_serie() {
@@ -262,7 +400,7 @@ void protocolo_procesar_serie() {
                 s_rx_index = 0;
             }
         } else {
-            if (s_rx_index < SERIAL_RX_BUFFER_SIZE - 1) {
+            if (s_rx_index < PROTOCOL_RX_BUFFER_SIZE - 1) {
                 if (!s_rx_overflow) {
                     s_rx_buffer[s_rx_index++] = c;
                 }

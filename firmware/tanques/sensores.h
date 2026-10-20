@@ -31,7 +31,7 @@ struct LecturasSensores {
 };
 
 /**
- * Inicializa los sensores o interrupciones necesarias.
+ * Inicializa los sensores físicos (HX711, OneWire/DS18B20 y caudalímetro).
  */
 void sensores_init();
 
@@ -40,5 +40,35 @@ void sensores_init();
  * @param out_lecturas Estructura receptora de datos.
  */
 void sensores_read(LecturasSensores &out_lecturas);
+
+/**
+ * Retorna las lecturas más recientes obtenidas en el último ciclo.
+ */
+const LecturasSensores& sensores_get_last();
+
+/**
+ * Retorna las cuentas crudas del convertidor HX711 del Tanque A (para calibración).
+ */
+long sensores_get_raw_hx711_a();
+
+/**
+ * Retorna las cuentas crudas del convertidor HX711 del Tanque B (para calibración).
+ */
+long sensores_get_raw_hx711_b();
+
+/**
+ * Retorna true si el interlock de sobrellenado en Tanque A está activo.
+ */
+bool sensores_get_overflow_a();
+
+/**
+ * Retorna true si el interlock de sobrellenado en Tanque B está activo.
+ */
+bool sensores_get_overflow_b();
+
+/**
+ * Retorna true si hay falla activa en cualquiera de los sensores.
+ */
+bool sensores_get_sensor_fault();
 
 #endif // SENSORES_H
