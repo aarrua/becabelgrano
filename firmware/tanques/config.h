@@ -65,6 +65,20 @@
 #endif
 
 // ==============================================================================
+// Calibración obligatoria para encender la bomba
+// ==============================================================================
+// 0 = (por defecto) el encendido se rechaza con reason "not_calibrated" mientras
+//     la calibración no venga de una EEPROM válida o no se hayan fijado tara,
+//     escala y capacidad de ambos tanques en la sesión.
+// 1 = Permite encender sin calibrar. SOLO para pruebas del relé con una lámpara,
+//     sin agua ni bomba real.
+#define PERMITIR_BOMBA_SIN_CALIBRAR 0
+
+#if (!MODO_SIM_SIN_SENSORES && PERMITIR_BOMBA_SIN_CALIBRAR)
+#warning "ATENCIÓN: PERMITIR_BOMBA_SIN_CALIBRAR=1 desactiva el rechazo not_calibrated. Usar solo con lámpara, nunca con la bomba real."
+#endif
+
+// ==============================================================================
 // Plausibilidad de las Celdas de Carga (HX711)
 // ==============================================================================
 // El HX711 entrega 24 bits con signo (±8388607). Un valor crudo cercano a esos

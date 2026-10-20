@@ -270,6 +270,11 @@ static void procesar_comando_linea(const char *line) {
     // Persiste parámetros de calibración vigentes en EEPROM con checksum.
     // =========================================================================
     if (strcmp(cmd_name, "save_cal") == 0) {
+        // No persistir valores de fábrica: al reiniciar pasarían por "calibrados"
+        if (!calibracion_esta_calibrado()) {
+            responder_ack(ack_id, false, "not_calibrated");
+            return;
+        }
         calibracion_save_eeprom();
         responder_ack(ack_id, true, nullptr);
         return;
@@ -400,6 +405,12 @@ static void procesar_comando_linea(const char *line) {
                 responder_ack(cmd_id, false, "sensor_fault");
                 return;
             }
+#if !PERMITIR_BOMBA_SIN_CALIBRAR
+            if (!calibracion_esta_calibrado()) {
+                responder_ack(cmd_id, false, "not_calibrated");
+                return;
+            }
+#endif
             if (sensores_get_overflow_a()) {
                 responder_ack(cmd_id, false, "overflow_a");
                 return;

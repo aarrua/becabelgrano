@@ -10,6 +10,9 @@
 #define CAL_CAPACIDAD_MAX_G   10000.0f
 #define CAL_FLOW_K_MIN        10.0f
 #define CAL_FLOW_K_MAX        10000.0f
+// Capacidad por defecto: por debajo de la del cilindro físico más chico (2450 g),
+// para que un nivel calculado con el default nunca subestime el llenado real.
+#define CAL_CAPACIDAD_DEFAULT_G 2000.0f
 
 /**
  * Estructura de calibración de sensores físicos.
@@ -23,8 +26,8 @@ struct CalibracionData {
     float scale_a;          // Factor de escala celda A (cuentas / gramo)
     long tare_b;            // Offset de tara celda B
     float scale_b;          // Factor de escala celda B
-    float max_weight_a;     // Capacidad máxima tanque A en gramos (4000.0 g)
-    float max_weight_b;     // Capacidad máxima tanque B en gramos (2450.0 g)
+    float max_weight_a;     // Capacidad máxima tanque A en gramos (default 2000.0 g)
+    float max_weight_b;     // Capacidad máxima tanque B en gramos (default 2000.0 g)
     float flow_k_factor;    // Pulsos por litro del caudalímetro (ej. 450.0 para YF-S201)
     uint16_t checksum;      // Checksum de verificación de integridad
 };
@@ -35,6 +38,14 @@ struct CalibracionData {
  * valores por defecto en RAM sin persistir nada automáticamente.
  */
 void calibracion_init();
+
+/**
+ * Indica si la calibración vigente es confiable: true solo si se cargó de una
+ * EEPROM válida (magic, versión y checksum) o si en esta sesión se fijaron tara,
+ * escala y capacidad de AMBOS tanques. Tras reset_cal vuelve a false.
+ * Mientras sea false, el encendido de la bomba se rechaza con "not_calibrated".
+ */
+bool calibracion_esta_calibrado();
 
 /**
  * Retorna los parámetros de calibración vigentes en memoria RAM.

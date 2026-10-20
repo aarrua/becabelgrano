@@ -27,6 +27,9 @@ function mapInterlockReason(reason?: string): string {
   if (reason.toLowerCase().includes('sensor_fault')) {
     return 'Interlock de seguridad activo: Falla o desconexión en sensores'
   }
+  if (reason.toLowerCase().includes('not_calibrated')) {
+    return 'Encendido bloqueado: el equipo no está calibrado (tara, escala y capacidad de ambos tanques)'
+  }
   if (reason.toLowerCase().includes('pump_timeout')) {
     return 'Alarma activa: Bomba apagada por exceder tiempo máximo continuo (Watchdog 60 s)'
   }

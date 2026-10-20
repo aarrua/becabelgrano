@@ -152,8 +152,8 @@ void sensores_read(LecturasSensores &out) {
     // =========================================================================
     // B. Celdas de Carga HX711 (verificación de preparación sin bloqueo)
     // =========================================================================
-    float max_a = (cal.max_weight_a > 1.0f) ? cal.max_weight_a : 4000.0f;
-    float max_b = (cal.max_weight_b > 1.0f) ? cal.max_weight_b : 2450.0f;
+    float max_a = (cal.max_weight_a > 1.0f) ? cal.max_weight_a : CAL_CAPACIDAD_DEFAULT_G;
+    float max_b = (cal.max_weight_b > 1.0f) ? cal.max_weight_b : CAL_CAPACIDAD_DEFAULT_G;
     float scale_a = (cal.scale_a > 0.001f) ? cal.scale_a : 420.0f;
     float scale_b = (cal.scale_b > 0.001f) ? cal.scale_b : 420.0f;
 

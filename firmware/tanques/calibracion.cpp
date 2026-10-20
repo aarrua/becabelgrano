@@ -6,6 +6,17 @@
 
 static CalibracionData s_cal;
 
+// Origen de la confianza en la calibración (ver calibracion_esta_calibrado)
+#define CAL_SESION_TARE_A  0x01
+#define CAL_SESION_TARE_B  0x02
+#define CAL_SESION_SCALE_A 0x04
+#define CAL_SESION_SCALE_B 0x08
+#define CAL_SESION_CAP_A   0x10
+#define CAL_SESION_CAP_B   0x20
+#define CAL_SESION_TODO    0x3F
+static bool s_desde_eeprom = false;
+static uint8_t s_sesion = 0;
+
 static uint16_t calcular_checksum(const CalibracionData &data) {
     const uint8_t *p = (const uint8_t *)&data;
     size_t len = sizeof(CalibracionData) - sizeof(data.checksum);
@@ -23,8 +34,10 @@ void calibracion_reset_defaults() {
     s_cal.scale_a = 420.0f; // Cuentas por gramo típicas con celda de 10 kg
     s_cal.tare_b = 0;
     s_cal.scale_b = 420.0f;
-    s_cal.max_weight_a = 4000.0f; // 4000 ml de capacidad máxima en A (~4000 g agua)
-    s_cal.max_weight_b = 2450.0f; // 2450 ml de capacidad máxima en B (~2450 g agua)
+    s_cal.max_weight_a = CAL_CAPACIDAD_DEFAULT_G; // Menor que el cilindro más chico: no subestima el llenado
+    s_cal.max_weight_b = CAL_CAPACIDAD_DEFAULT_G;
+    s_desde_eeprom = false;
+    s_sesion = 0;
     s_cal.flow_k_factor = 450.0f; // Sensor YF-S201 nominal (~450 pulsos/L)
     s_cal.checksum = calcular_checksum(s_cal);
 }
@@ -37,6 +50,8 @@ void calibracion_init() {
         uint16_t cs = calcular_checksum(temp);
         if (cs == temp.checksum) {
             s_cal = temp;
+            s_desde_eeprom = true;
+            s_sesion = 0;
             return;
         }
     }
@@ -46,27 +61,35 @@ void calibracion_init() {
     calibracion_reset_defaults();
 }
 
+bool calibracion_esta_calibrado() {
+    return s_desde_eeprom || (s_sesion == CAL_SESION_TODO);
+}
+
 const CalibracionData& calibracion_get() {
     return s_cal;
 }
 
 void calibracion_set_tare_a(long tare) {
     s_cal.tare_a = tare;
+    s_sesion |= CAL_SESION_TARE_A;
 }
 
 void calibracion_set_tare_b(long tare) {
     s_cal.tare_b = tare;
+    s_sesion |= CAL_SESION_TARE_B;
 }
 
 void calibracion_set_scale_a(float scale) {
     if (scale > 0.0001f) {
         s_cal.scale_a = scale;
+        s_sesion |= CAL_SESION_SCALE_A;
     }
 }
 
 void calibracion_set_scale_b(float scale) {
     if (scale > 0.0001f) {
         s_cal.scale_b = scale;
+        s_sesion |= CAL_SESION_SCALE_B;
     }
 }
 
@@ -78,12 +101,14 @@ static bool en_rango(float v, float min_v, float max_v) {
 bool calibracion_set_capacity_a(float gramos) {
     if (!en_rango(gramos, CAL_CAPACIDAD_MIN_G, CAL_CAPACIDAD_MAX_G)) return false;
     s_cal.max_weight_a = gramos;
+    s_sesion |= CAL_SESION_CAP_A;
     return true;
 }
 
 bool calibracion_set_capacity_b(float gramos) {
     if (!en_rango(gramos, CAL_CAPACIDAD_MIN_G, CAL_CAPACIDAD_MAX_G)) return false;
     s_cal.max_weight_b = gramos;
+    s_sesion |= CAL_SESION_CAP_B;
     return true;
 }
 

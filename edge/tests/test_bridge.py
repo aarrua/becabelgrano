@@ -487,3 +487,15 @@ def test_calibration_ack_with_firmware_reason_is_published(bridge: TanquesBridge
 
     acks = [m for m in fake_mqtt.published_messages if m["topic"] == "tanques/ack"]
     assert acks[-1]["payload"] == {"ack": "cal-cap-bad", "ok": False, "reason": "invalid_capacity"}
+
+
+def test_not_calibrated_rejection_ack_is_published(bridge: TanquesBridge, fake_mqtt: FakeMqttClient) -> None:
+    """El rechazo del firmware con reason not_calibrated llega a tanques/ack sin alteraciones."""
+    cmd = {"id": "c_nocal", "cmd": "set", "target": "pump", "value": True}
+    bridge.handle_incoming_command(json.dumps(cmd))
+    assert json.loads(bridge.command_queue.get_nowait()) == cmd
+
+    bridge.process_device_line(json.dumps({"ack": "c_nocal", "ok": False, "reason": "not_calibrated"}))
+
+    acks = [m for m in fake_mqtt.published_messages if m["topic"] == "tanques/ack"]
+    assert acks[-1]["payload"] == {"ack": "c_nocal", "ok": False, "reason": "not_calibrated"}
