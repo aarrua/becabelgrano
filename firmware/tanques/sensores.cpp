@@ -102,6 +102,13 @@ void sensores_init() {
     // 2. Celdas de carga HX711
     s_scale_a.begin(PIN_HX711_A_DOUT, PIN_HX711_A_SCK);
     s_scale_b.begin(PIN_HX711_B_DOUT, PIN_HX711_B_SCK);
+    // La librería HX711 0.7.5 usa "#ifdef ARCH_ESPRESSIF" (macro siempre definida)
+    // en lugar de "#if", y en AVR deja DOUT como INPUT sin pull-up: sin módulo
+    // conectado la línea flota y puede leer bajo (ceros) o ruido. Con el pull-up un
+    // DOUT suelto lee alto (HX711 "no listo"); con el módulo conectado este maneja
+    // la línea activamente y el pull-up no molesta.
+    pinMode(PIN_HX711_A_DOUT, INPUT_PULLUP);
+    pinMode(PIN_HX711_B_DOUT, INPUT_PULLUP);
 
     // 3. Sensor de caudal por interrupción (INT0 en pin D2)
     pinMode(PIN_FLOW_SENSOR, INPUT_PULLUP);
