@@ -374,6 +374,7 @@ Enviar un `set` con `id` de 36 caracteres (`"id":"123e4567-e89b-12d3-a456-426614
 
 ### Caso 7.9: HX711 sin conectar o sin alimentar
 Con el Uno solo (sin módulo HX711, o con el módulo sin alimentar), la línea DOUT queda atascada y el crudo es exactamente `0` (o `-1`). Antes se informaba `weight_g 0.0` / `level_pct 0.0` como válidos; ahora se trata como lectura inválida (`HX711_RAW_TODO_CEROS` / `HX711_RAW_TODO_UNOS`).
+0. Con el pull-up interno en DOUT (compensación del error de la librería 0.7.5), un DOUT suelto lee alto y el HX711 figura "no listo"; el crudo `0`/`-1` solo aparece si el módulo está sin alimentar o la línea queda atascada.
 1. Con `MODO_SIM_SIN_SENSORES 0` y sin HX711 conectado, observar la telemetría. **Esperado**: `weight_g` y `level_pct` en `null` en el tanque afectado y `alarms.sensor_fault` en `true`.
 2. `{"id":"hx1","cmd":"tare","tank":"a"}`. **Esperado**: `{"ack":"hx1","ok":false,"reason":"sensor_not_ready"}`.
 3. `{"id":"hx2","cmd":"set","target":"pump","value":true}`. **Esperado**: `{"ack":"hx2","ok":false,"reason":"sensor_fault"}` y el relé sigue apagado.

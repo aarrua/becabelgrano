@@ -34,7 +34,7 @@ arduino-cli core install arduino:avr@1.8.8
 
 ### 2.2 Librerías Homologadas y Versiones Fijadas
 Para garantizar determinismo en el consumo de RAM/Flash y compatibilidad binaria, se fijan las siguientes versiones aprobadas:
-- **HX711**: `0.7.5` (`HX711 Arduino Library` de Bogdan Necula / Rob Tillaart)
+- **HX711**: `0.7.5` (`HX711 Arduino Library` de Bogdan Necula / Rob Tillaart). La 0.7.5 tiene un error: usa `#ifdef ARCH_ESPRESSIF` (macro siempre definida) en vez de `#if` y deja el pin DOUT como `INPUT` sin pull-up en AVR, de modo que un DOUT flotante puede leer bajo (ceros) o ruido. El firmware lo compensa con `pinMode(PIN_HX711_x_DOUT, INPUT_PULLUP)` en `sensores_init()`; la versión sigue fijada en 0.7.5 (la rama principal de la librería ya usa `#if`).
 - **OneWire**: `2.3.8` (de Paul Stoffregen / Jim Studt)
 - **DallasTemperature**: `4.0.6` (de Miles Burton)
 - **Adafruit NeoPixel**: `1.15.5` (de Adafruit)
