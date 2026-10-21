@@ -9,6 +9,10 @@ y este proyecto adhiere a [Conventional Commits](https://www.conventionalcommits
 
 ## [Unreleased]
 
+### Fixed - Firmware: HX711 ausente
+- Un crudo de exactamente `0` o `-1` del HX711 (módulo sin conectar, sin alimentar o DOUT atascado) ahora es lectura inválida en `leer_celda` y `promediar_raw`. Antes se informaba peso y nivel `0.0` como válidos con `sensor_fault false`. Constantes `HX711_RAW_TODO_CEROS` / `HX711_RAW_TODO_UNOS` en `firmware/tanques/config.h`.
+- Guía de hardware: caso 7.9 (HX711 sin conectar o sin alimentar). Decisión documentada en `docs/DECISIONES-6.md`.
+
 ### Added - Fase 4: Puesta en Marcha Integral (Etapa 1 - Mosquitto + Nginx Frontend)
 - **Broker MQTT Mosquitto (`infra/docker-compose.yml`)**:
   - Incorporado servicio `tanques-mosquitto` con imagen fijada `eclipse-mosquitto:2.0.22` en el puerto `1883`.

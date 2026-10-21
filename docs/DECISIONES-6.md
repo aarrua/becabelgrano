@@ -51,3 +51,12 @@ Implementada sin `temp_fault`: la falla del DS18B20 se informa solo con `temp_c:
 
 ### `tare` con promedio de muestras
 Promedia `HX711_TARE_MUESTRAS` (10) lecturas con un tope de `HX711_TARE_TIMEOUT_MS` (2000 ms) en total. Una muestra no lista a tiempo o saturada rechaza con `sensor_not_ready` y no cambia la tara. El loop queda bloqueado ese lapso (hasta ~1 s con el HX711 a 10 Hz, ~125 ms a 80 Hz): durante ese tiempo no hay telemetría ni watchdog de bomba, y el buffer serie de 64 bytes del Uno podría desbordarse si llegan comandos. Es aceptable porque la tara se hace con el sistema en reposo. El tope se subió luego de 1,1 s a 2 s para dar margen a un HX711 a 10 Hz. `tare` se rechaza además con `pump_on` si la bomba está encendida (se chequea antes de leer el HX711). No verificado con hardware real.
+
+## Crudo 0 / -1 del HX711 es lectura inválida (fix `hx711-ausente`)
+**Hallazgo (Uno real, sin celdas ni HX711)**: la telemetría informaba `weight_g 0.0` y `level_pct 0.0` como válidos con `sensor_fault false`. La línea DOUT queda atascada en bajo, el crudo es exactamente `0` (todos los bits en cero) y pasaba los chequeos de saturación y de plausibilidad de peso (con tara 0 el peso resultante era 0 g).
+
+**Decisión**: en `leer_celda` y `promediar_raw` (`sensores.cpp`), un crudo igual a `0` o `-1` (todos los bits en cero o en uno: módulo ausente, sin alimentar o DOUT atascado) se descarta como inválido. Constantes `HX711_RAW_TODO_CEROS` y `HX711_RAW_TODO_UNOS` en `config.h`. El efecto es `null` en peso y nivel, `sensor_fault true`, `tare` con `sensor_not_ready` y encendido de bomba rechazado con `sensor_fault`.
+
+**Riesgo aceptado**: una celda real que entregue justo 0 o -1 en una muestra se descarta ese ciclo (un `sensor_fault` momentáneo, fail-safe). Es muy improbable y se recupera solo con la lectura siguiente. Con la celda sin carga y tara recién hecha el crudo real no es 0 salvo coincidencia exacta.
+
+Consumo compilado (`arduino-cli`, `MODO_SIM_SIN_SENSORES 0`): Flash 17854 bytes (55%), RAM 875 bytes (42%). Caso de prueba: `firmware/GUIA_PRUEBAS_HARDWARE.md`, caso 7.9. No verificado aún en hardware tras el cambio.
