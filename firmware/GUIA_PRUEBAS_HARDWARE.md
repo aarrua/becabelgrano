@@ -371,3 +371,10 @@ El `tare` promedia 10 muestras (`HX711_TARE_MUESTRAS`) y puede tardar ~1 s con e
 
 ### Caso 7.8: Ids largos
 Enviar un `set` con `id` de 36 caracteres (`"id":"123e4567-e89b-12d3-a456-426614174000"`) con el campo `"ts"` incluido. **Esperado**: el ack vuelve con el mismo `id` completo.
+
+### Caso 7.9: HX711 sin conectar o sin alimentar
+Con el Uno solo (sin módulo HX711, o con el módulo sin alimentar), la línea DOUT queda atascada y el crudo es exactamente `0` (o `-1`). Antes se informaba `weight_g 0.0` / `level_pct 0.0` como válidos; ahora se trata como lectura inválida (`HX711_RAW_TODO_CEROS` / `HX711_RAW_TODO_UNOS`).
+1. Con `MODO_SIM_SIN_SENSORES 0` y sin HX711 conectado, observar la telemetría. **Esperado**: `weight_g` y `level_pct` en `null` en el tanque afectado y `alarms.sensor_fault` en `true`.
+2. `{"id":"hx1","cmd":"tare","tank":"a"}`. **Esperado**: `{"ack":"hx1","ok":false,"reason":"sensor_not_ready"}`.
+3. `{"id":"hx2","cmd":"set","target":"pump","value":true}`. **Esperado**: `{"ack":"hx2","ok":false,"reason":"sensor_fault"}` y el relé sigue apagado.
+4. Conectar y alimentar el HX711: el `sensor_fault` se limpia solo y los valores vuelven a ser numéricos.
