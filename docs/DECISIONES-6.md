@@ -59,4 +59,9 @@ Promedia `HX711_TARE_MUESTRAS` (10) lecturas con un tope de `HX711_TARE_TIMEOUT_
 
 **Riesgo aceptado**: una celda real que entregue justo 0 o -1 en una muestra se descarta ese ciclo (un `sensor_fault` momentáneo, fail-safe). Es muy improbable y se recupera solo con la lectura siguiente. Con la celda sin carga y tara recién hecha el crudo real no es 0 salvo coincidencia exacta.
 
-Consumo compilado (`arduino-cli`, `MODO_SIM_SIN_SENSORES 0`): Flash 17854 bytes (55%), RAM 875 bytes (42%). Caso de prueba: `firmware/GUIA_PRUEBAS_HARDWARE.md`, caso 7.9. No verificado aún en hardware tras el cambio.
+Consumo compilado (`arduino-cli`, `MODO_SIM_SIN_SENSORES 0`): Flash 17870 bytes (55%), RAM 875 bytes (42%) (con el pull-up de DOUT). Caso de prueba: `firmware/GUIA_PRUEBAS_HARDWARE.md`, caso 7.9. No verificado aún en hardware tras el cambio.
+
+### Causa raíz del DOUT flotante: error de HX711 0.7.5
+La librería HX711 0.7.5 usa `#ifdef ARCH_ESPRESSIF` (macro siempre definida) donde debía ir `#if`, y en AVR deja el pin DOUT como `INPUT` sin pull-up (la rama principal ya usa `#if`). Un DOUT flotante puede leer bajo (ceros) o ruido, lo que explica el crudo `0` del hallazgo anterior.
+
+**Decisión**: se mantiene fijada la versión 0.7.5 y el firmware lo compensa con `pinMode(PIN_HX711_A_DOUT, INPUT_PULLUP)` y `pinMode(PIN_HX711_B_DOUT, INPUT_PULLUP)` justo después de los `begin()` en `sensores_init()`. Con el módulo conectado el HX711 maneja la línea activamente y el pull-up no molesta. El descarte de crudo `0`/`-1` se conserva como segunda defensa (módulo sin alimentar o línea atascada). No verificado en hardware tras el cambio.
