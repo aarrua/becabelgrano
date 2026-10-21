@@ -49,6 +49,16 @@ static void flow_sensor_isr() {
 }
 
 /**
+ * Indica si un crudo del HX711 no puede ser una medida real: saturado (cable
+ * cortado o celda fuera de rango) o exactamente 0 / -1 (módulo ausente, sin
+ * alimentar o DOUT atascado en bajo/alto; sin esto el 0 pasaba como peso válido).
+ */
+static bool raw_invalido(long raw) {
+    return raw >= HX711_RAW_SATURADO || raw <= -HX711_RAW_SATURADO
+        || raw == HX711_RAW_TODO_CEROS || raw == HX711_RAW_TODO_UNOS;
+}
+
+/**
  * Lee una celda HX711 y valida plausibilidad. Devuelve false (y deja peso y nivel
  * inválidos) si el HX711 no está listo, si el valor crudo está saturado
  * (cable cortado o celda fuera de rango) o si el peso es menor que
@@ -68,7 +78,7 @@ static bool leer_celda(
 
     long raw = hx.read();
     raw_store = raw;
-    if (raw >= HX711_RAW_SATURADO || raw <= -HX711_RAW_SATURADO) return false;
+    if (raw_invalido(raw)) return false;
 
     float w = (float)(raw - tare) / scale;
     if (w < HX711_PESO_MIN_PLAUSIBLE_G) return false;
@@ -92,6 +102,13 @@ void sensores_init() {
     // 2. Celdas de carga HX711
     s_scale_a.begin(PIN_HX711_A_DOUT, PIN_HX711_A_SCK);
     s_scale_b.begin(PIN_HX711_B_DOUT, PIN_HX711_B_SCK);
+    // La librería HX711 0.7.5 usa "#ifdef ARCH_ESPRESSIF" (macro siempre definida)
+    // en lugar de "#if", y en AVR deja DOUT como INPUT sin pull-up: sin módulo
+    // conectado la línea flota y puede leer bajo (ceros) o ruido. Con el pull-up un
+    // DOUT suelto lee alto (HX711 "no listo"); con el módulo conectado este maneja
+    // la línea activamente y el pull-up no molesta.
+    pinMode(PIN_HX711_A_DOUT, INPUT_PULLUP);
+    pinMode(PIN_HX711_B_DOUT, INPUT_PULLUP);
 
     // 3. Sensor de caudal por interrupción (INT0 en pin D2)
     pinMode(PIN_FLOW_SENSOR, INPUT_PULLUP);
@@ -247,7 +264,7 @@ static bool promediar_raw(HX711 &hx, long &store, long &out_raw) {
             if (millis() - inicio >= HX711_TARE_TIMEOUT_MS) return false;
         }
         long raw = hx.read();
-        if (raw >= HX711_RAW_SATURADO || raw <= -HX711_RAW_SATURADO) return false;
+        if (raw_invalido(raw)) return false;
         suma += raw;
         ultimo = raw;
     }
