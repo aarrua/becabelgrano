@@ -49,6 +49,16 @@ static void flow_sensor_isr() {
 }
 
 /**
+ * Indica si un crudo del HX711 no puede ser una medida real: saturado (cable
+ * cortado o celda fuera de rango) o exactamente 0 / -1 (módulo ausente, sin
+ * alimentar o DOUT atascado en bajo/alto; sin esto el 0 pasaba como peso válido).
+ */
+static bool raw_invalido(long raw) {
+    return raw >= HX711_RAW_SATURADO || raw <= -HX711_RAW_SATURADO
+        || raw == HX711_RAW_TODO_CEROS || raw == HX711_RAW_TODO_UNOS;
+}
+
+/**
  * Lee una celda HX711 y valida plausibilidad. Devuelve false (y deja peso y nivel
  * inválidos) si el HX711 no está listo, si el valor crudo está saturado
  * (cable cortado o celda fuera de rango) o si el peso es menor que
@@ -68,7 +78,7 @@ static bool leer_celda(
 
     long raw = hx.read();
     raw_store = raw;
-    if (raw >= HX711_RAW_SATURADO || raw <= -HX711_RAW_SATURADO) return false;
+    if (raw_invalido(raw)) return false;
 
     float w = (float)(raw - tare) / scale;
     if (w < HX711_PESO_MIN_PLAUSIBLE_G) return false;
@@ -247,7 +257,7 @@ static bool promediar_raw(HX711 &hx, long &store, long &out_raw) {
             if (millis() - inicio >= HX711_TARE_TIMEOUT_MS) return false;
         }
         long raw = hx.read();
-        if (raw >= HX711_RAW_SATURADO || raw <= -HX711_RAW_SATURADO) return false;
+        if (raw_invalido(raw)) return false;
         suma += raw;
         ultimo = raw;
     }

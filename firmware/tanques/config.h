@@ -84,6 +84,13 @@
 // El HX711 entrega 24 bits con signo (±8388607). Un valor crudo cercano a esos
 // extremos indica saturación (cable cortado, celda desconectada o fuera de rango).
 #define HX711_RAW_SATURADO         8388000L
+// Un crudo de exactamente 0 (todos los bits en cero) o -1 (todos en uno) no es una
+// medida real de una celda: indica HX711 ausente, sin alimentar o con la línea de
+// datos (DOUT) atascada en bajo/alto. Una celda real casi nunca entrega esos
+// valores exactos y, aunque lo hiciera una vez, la lectura siguiente los descarta
+// sin riesgo (la telemetría se recupera sola).
+#define HX711_RAW_TODO_CEROS       0L
+#define HX711_RAW_TODO_UNOS        (-1L)
 // Peso mínimo creíble en gramos. Por debajo se considera lectura inválida
 // (tara mal fijada, celda invertida o falla) y se levanta sensor_fault.
 #define HX711_PESO_MIN_PLAUSIBLE_G (-50.0f)
