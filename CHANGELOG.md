@@ -9,6 +9,22 @@ y este proyecto adhiere a [Conventional Commits](https://www.conventionalcommits
 
 ## [Unreleased]
 
+### Added - Demo "Caudal Real" (nivel/temperatura/bomba simulados, caudal real)
+- **`edge/bridge.py` — opción `--flow-serial <PUERTO>` / `FLOW_SERIAL_PORT`**:
+  - Apagada por defecto y válida únicamente junto con `--source sim` (el bridge aborta con código 1 si se combina con otra fuente).
+  - Clase `RealFlowReader`: hilo adicional de **solo lectura** sobre un segundo puerto serial independiente (DTR y RTS en `False` antes de abrir, igual que el puerto principal; nunca escribe comandos ni controla la bomba real), con reconexión y backoff exponencial propios.
+  - Recuerda el último `flow_lpm` no nulo recibido junto con su hora. Al escribir cada trama simulada en InfluxDB, reemplaza su `flow_lpm` por el real si la última lectura tiene menos de 3 s de antigüedad.
+  - Si el dato real falta o está vencido (> 3 s), el campo `flow_lpm` se omite de la trama (nunca se escribe `0`) y se loguea un aviso una sola vez por sesión.
+  - Líneas que no son JSON en el puerto del caudalímetro se ignoran sin crashear, igual que en el pipeline serial principal.
+  - 7 tests nuevos en `edge/tests/test_bridge.py` con un serial falso de solo lectura (`FakeFlowSerialPort`): reemplazo del flow simulado por el real, omisión de campo y aviso único con dato viejo, comportamiento sin cambios cuando la opción está apagada, y validación de que `--flow-serial` exige `--source sim`.
+- **Grafana (`infra/grafana/provisioning/dashboards/json/tanques.json`)**:
+  - Rotulados los paneles de nivel y temperatura con "(simulado)" y el de caudal con "(real)".
+  - Agregado un panel de texto fijo arriba de todo: "Demostración: nivel, temperatura y bomba simulados; caudal medido por el caudalímetro real". Reubicados los `gridPos.y` de los paneles existentes para dejarle lugar sin solaparse.
+- **Frontend**: cartel opcional `DemoBanner` debajo de la barra superior (`Navbar`), controlado por `VITE_DEMO_BANNER` (documentada en `frontend/.env.example`); no se muestra si la variable no está definida. Sin otros cambios en la SPA.
+- **`scripts/iniciar-demo.ps1`** (Windows PowerShell 5.1, sin secretos en el código ni en pantalla): selecciona el JDK 21 de Eclipse Adoptium más nuevo y fija `JAVA_HOME`/`Path`; carga `infra\.env` en el entorno sin mostrarlo; define `INFLUX_URL`; genera un `JWT_SECRET` aleatorio por sesión; pide `DOCENTE_PASSWORD` y `ALUMNO_PASSWORD` por `Read-Host`; verifica que las seis variables obligatorias (`JAVA_HOME`, `INFLUX_URL`, `INFLUX_TOKEN`, `JWT_SECRET`, `DOCENTE_PASSWORD`, `ALUMNO_PASSWORD`) estén definidas y aborta sin levantar nada si falta alguna; levanta `docker compose up -d` desde `infra/` y espera a que InfluxDB responda; abre el bridge (con `--flow-serial` salvo `-SinCaudal`) y el backend en perfil `prod` en ventanas de PowerShell separadas.
+- **`docs/06-demo.md`**: guía de la demo (qué es real/simulado, requisitos, uso del script, plan B con `-SinCaudal`, compilación de la SPA con `VITE_DEMO_BANNER`).
+- **No verificado en esta tarea** (sin hardware ni Docker Desktop disponibles en la sesión de trabajo): ejecución real de `scripts/iniciar-demo.ps1` de punta a punta (con y sin `-SinCaudal`) contra el Arduino Uno físico del caudalímetro, `docker compose up -d` y el backend en `prod` corriendo en simultáneo. Sí se verificaron: `pytest edge/` (43 tests), `mvn test` y `npm run build` del frontend.
+
 ### Fixed - Firmware: HX711 ausente
 - Un crudo de exactamente `0` o `-1` del HX711 (módulo sin conectar, sin alimentar o DOUT atascado) ahora es lectura inválida en `leer_celda` y `promediar_raw`. Antes se informaba peso y nivel `0.0` como válidos con `sensor_fault false`. Constantes `HX711_RAW_TODO_CEROS` / `HX711_RAW_TODO_UNOS` en `firmware/tanques/config.h`.
 - Causa raíz: HX711 0.7.5 deja DOUT como `INPUT` sin pull-up en AVR (`#ifdef ARCH_ESPRESSIF` siempre definido). `sensores_init()` configura `INPUT_PULLUP` en los DOUT de ambos HX711; versión de la librería sigue fijada en 0.7.5.

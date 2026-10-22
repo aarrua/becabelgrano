@@ -141,6 +141,8 @@ export INFLUX_TOKEN="<token-influxdb>"
 mvn spring-boot:run "-Dspring-boot.run.profiles=prod"
 ```
 *(Ver procedimiento detallado de 5 terminales y pruebas en [docs/05-verificacion-e2e.md](docs/05-verificacion-e2e.md))*.
+
+Para demos con un único caudalímetro real conectado por USB (resto simulado), en Windows PowerShell 5.1 hay un script que automatiza todo lo anterior: `scripts/iniciar-demo.ps1` (opción `-SinCaudal` para el plan B 100% simulado). Ver [docs/06-demo.md](docs/06-demo.md).
 * **API REST**: `http://localhost:8080/api`
 * **Swagger UI / OpenAPI 3**: `http://localhost:8080/swagger-ui.html`
 * **Consola H2**: `http://localhost:8080/h2-console` (`JDBC URL: jdbc:h2:file:./data/tanquesdb`)
