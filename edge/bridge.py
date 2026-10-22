@@ -25,6 +25,11 @@ Funciones del Bridge:
    - Reconexión automática con backoff exponencial ante caídas del puerto serie y del broker MQTT.
    - Detección y aviso en el arranque si el reloj del sistema se encuentra desfasado.
    - Ignora líneas no JSON o ruido de arranque sin crashear.
+4. Caudal Real en Demos (--flow-serial, solo con --source sim):
+   Hilo adicional de SOLO LECTURA (DTR/RTS en False, nunca escribe) sobre un segundo puerto
+   serial donde un Arduino Uno con el caudalímetro real emite telemetría JSON. Reemplaza el
+   flow_lpm simulado por el real mientras la última lectura tenga menos de 3 s de antigüedad;
+   si falta o está vieja, omite el campo (no escribe 0) y lo avisa una sola vez por log.
 """
 
 from __future__ import annotations
@@ -174,6 +179,128 @@ def format_influx_line(data: Dict[str, Any], timestamp_ns: Optional[int] = None)
 
 
 # ==============================================================================
+# Caudal Real en Demos: Lector Serial de Solo Lectura (--flow-serial)
+# ==============================================================================
+
+class RealFlowReader:
+    """
+    Hilo de SOLO LECTURA sobre un puerto serial independiente donde un Arduino Uno con el
+    caudalímetro real emite telemetría JSON (flow_lpm). Nunca escribe al puerto: ni comandos
+    ni control de la bomba, que permanece manual durante la demo.
+    """
+
+    def __init__(
+        self,
+        port: str,
+        baudrate: int = 115200,
+        max_age_s: float = 3.0,
+        serial_factory: Optional[Callable[[], Any]] = None,
+    ) -> None:
+        self.port = port
+        self.baudrate = baudrate
+        self.max_age_s = max_age_s
+        self._serial_factory = serial_factory or (lambda: serial.Serial())
+        self._lock = threading.Lock()
+        self._last_value: Optional[float] = None
+        self._last_time: Optional[float] = None
+        self.running = True
+        self._thread: Optional[threading.Thread] = None
+
+    def start(self) -> None:
+        """Lanza el hilo lector en segundo plano."""
+        self._thread = threading.Thread(target=self._run, daemon=True)
+        self._thread.start()
+
+    def stop(self) -> None:
+        """Detiene el hilo lector y libera el puerto."""
+        self.running = False
+        if self._thread and self._thread.is_alive():
+            self._thread.join(timeout=1.0)
+
+    def get_flow_lpm(self) -> Optional[float]:
+        """Devuelve el último flow_lpm real si tiene menos de max_age_s de antigüedad."""
+        with self._lock:
+            if self._last_value is None or self._last_time is None:
+                return None
+            if (time.time() - self._last_time) > self.max_age_s:
+                return None
+            return self._last_value
+
+    def _record_line(self, raw_line: str) -> None:
+        """Parsea una línea JSON del caudalímetro real; ignora cualquier línea que no lo sea."""
+        line = raw_line.strip()
+        if not line:
+            return
+        try:
+            data = json.loads(line)
+        except json.JSONDecodeError:
+            return
+        if not isinstance(data, dict):
+            return
+
+        flow = data.get("flow_lpm")
+        if flow is None:
+            return
+        try:
+            flow_value = float(flow)
+        except (TypeError, ValueError):
+            return
+
+        with self._lock:
+            self._last_value = flow_value
+            self._last_time = time.time()
+
+    def _run(self) -> None:
+        if serial is None:
+            logger.error("pyserial no disponible: no se puede leer el caudalímetro real en %s.", self.port)
+            return
+
+        backoff = 1.0
+        max_backoff = 30.0
+
+        while self.running:
+            ser: Optional[Any] = None
+            try:
+                logger.info(
+                    "Abriendo puerto del caudalímetro real %s a %d baudios (solo lectura, DTR=False, RTS=False)...",
+                    self.port, self.baudrate
+                )
+                ser = self._serial_factory()
+                ser.port = self.port
+                ser.baudrate = self.baudrate
+                ser.timeout = 1.0
+                ser.dtr = False
+                ser.rts = False
+                ser.open()
+                logger.info("✓ Caudalímetro real conectado en %s.", self.port)
+                backoff = 1.0
+
+                while self.running and ser.is_open:
+                    line_bytes = ser.readline()
+                    if not line_bytes:
+                        continue
+                    try:
+                        line = line_bytes.decode("utf-8", errors="ignore")
+                    except Exception:
+                        continue
+                    self._record_line(line)
+
+            except Exception as e:
+                logger.warning("Aviso o desconexión en puerto del caudalímetro real %s: %s", self.port, e)
+            finally:
+                if ser is not None:
+                    try:
+                        if ser.is_open:
+                            ser.close()
+                    except Exception:
+                        pass
+
+            if self.running:
+                time.sleep(backoff)
+                backoff = min(backoff * 2.0, max_backoff)
+
+
+# ==============================================================================
 # Controlador Principal del Bridge (TanquesBridge)
 # ==============================================================================
 
@@ -199,11 +326,14 @@ class TanquesBridge:
         log_interval: int = 30,
         use_server_timestamp: bool = True,
         mqtt_client: Optional[Any] = None,
+        flow_reader: Optional["RealFlowReader"] = None,
     ) -> None:
         if max_cmd_age_s is not None:
             command_max_age_ms = int(max_cmd_age_s * 1000)
 
         self.influx_writer = influx_writer
+        self.flow_reader = flow_reader
+        self._flow_stale_warned = False
         self.mqtt_host = mqtt_host
         self.mqtt_port = mqtt_port
         self.mqtt_user = mqtt_user
@@ -289,6 +419,9 @@ class TanquesBridge:
                 if timer:
                     timer.cancel()
             self._pending_commands.clear()
+
+        if self.flow_reader:
+            self.flow_reader.stop()
 
         if self.mqtt_client:
             try:
@@ -472,6 +605,21 @@ class TanquesBridge:
         # Caso B: Trama periódica de Telemetría
         if not self.influx_writer:
             return
+
+        if self.flow_reader is not None:
+            data = dict(data)
+            real_flow = self.flow_reader.get_flow_lpm()
+            if real_flow is not None:
+                data["flow_lpm"] = real_flow
+            else:
+                data.pop("flow_lpm", None)
+                if not self._flow_stale_warned:
+                    logger.warning(
+                        "Caudal real ausente o con más de %.1f s de antigüedad en %s: "
+                        "se omite el campo flow_lpm en la telemetría (aviso único).",
+                        self.flow_reader.max_age_s, self.flow_reader.port
+                    )
+                    self._flow_stale_warned = True
 
         timestamp_ns = None if self.use_server_timestamp else time.time_ns()
         influx_line = format_influx_line(data, timestamp_ns)
@@ -805,6 +953,11 @@ def main() -> None:
                         help="Antigüedad máxima admisible en ms para comandos (default: 5000; 0 desactiva)")
     parser.add_argument("--use-local-timestamp", action="store_true",
                         help="Envía el timestamp local del bridge a InfluxDB (por defecto se omite para usar la hora del servidor)")
+    parser.add_argument("--flow-serial", type=str,
+                        default=os.environ.get("FLOW_SERIAL_PORT", ""),
+                        help="Puerto serial de SOLO LECTURA del caudalímetro real para demos (ej: COM4 o /dev/ttyACM0). "
+                             "Apagado por defecto; solo válido junto con --source sim. Reemplaza el flow_lpm simulado "
+                             "por el real mientras la última lectura tenga menos de 3 s (default: $FLOW_SERIAL_PORT)")
 
     # InfluxDB (lee valores por defecto desde variables de entorno)
     parser.add_argument("--influx-url", type=str,
@@ -836,6 +989,12 @@ def main() -> None:
 
     args = parser.parse_args()
 
+    if args.flow_serial and not args.source.startswith("sim"):
+        logger.error(
+            "ERROR DE CONFIGURACIÓN: --flow-serial (o FLOW_SERIAL_PORT) solo es válido junto con --source sim."
+        )
+        sys.exit(1)
+
     if not args.influx_token or not args.influx_token.strip():
         logger.error(
             "ERROR DE CONFIGURACIÓN: No se configuró el token de autenticación de InfluxDB. "
@@ -855,6 +1014,12 @@ def main() -> None:
 
     use_server_time = not args.use_local_timestamp
 
+    flow_reader = None
+    if args.flow_serial:
+        logger.info("Caudal real habilitado para la demo: leyendo flow_lpm desde %s (solo lectura).", args.flow_serial)
+        flow_reader = RealFlowReader(port=args.flow_serial, baudrate=args.baudrate)
+        flow_reader.start()
+
     bridge = TanquesBridge(
         influx_writer=influx,
         mqtt_host=args.mqtt_host,
@@ -863,7 +1028,8 @@ def main() -> None:
         mqtt_password=args.mqtt_password,
         command_max_age_ms=args.command_max_age_ms,
         use_server_timestamp=use_server_time,
-        log_interval=args.log_every
+        log_interval=args.log_every,
+        flow_reader=flow_reader
     )
 
     bridge.start_mqtt()

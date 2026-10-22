@@ -13,14 +13,15 @@ Verifica:
 """
 
 import json
+import logging
 import queue
 import time
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 from unittest.mock import MagicMock
 
 import pytest
 
-from edge.bridge import TanquesBridge, format_influx_line
+from edge.bridge import RealFlowReader, TanquesBridge, format_influx_line
 
 
 class FakeMqttClient:
@@ -499,3 +500,150 @@ def test_not_calibrated_rejection_ack_is_published(bridge: TanquesBridge, fake_m
 
     acks = [m for m in fake_mqtt.published_messages if m["topic"] == "tanques/ack"]
     assert acks[-1]["payload"] == {"ack": "c_nocal", "ok": False, "reason": "not_calibrated"}
+
+
+# ==============================================================================
+# Demo con Caudalímetro Real (--flow-serial): RealFlowReader
+# ==============================================================================
+
+class FakeFlowSerialPort:
+    """Serial falso de solo lectura para probar RealFlowReader sin hardware."""
+
+    def __init__(self, lines: Optional[List[str]] = None) -> None:
+        self._lines: List[str] = list(lines or [])
+        self.is_open = False
+        self.dtr = True
+        self.rts = True
+        self.port: Optional[str] = None
+        self.baudrate: Optional[int] = None
+        self.timeout: Optional[float] = None
+
+    def open(self) -> None:
+        self.is_open = True
+
+    def close(self) -> None:
+        self.is_open = False
+
+    def readline(self) -> bytes:
+        if self._lines:
+            return (self._lines.pop(0) + "\n").encode("utf-8")
+        time.sleep(0.01)
+        return b""
+
+
+def _telemetry_line(flow_lpm: Any = 9.99) -> str:
+    return json.dumps({
+        "v": 1,
+        "seq": 1,
+        "uptime_ms": 100,
+        "tank_a": {"weight_g": None, "level_pct": 10.0, "temp_c": 20.0},
+        "tank_b": {"weight_g": None, "level_pct": 5.0, "temp_c": 20.0},
+        "flow_lpm": flow_lpm,
+        "actuators": {"pump": False},
+        "alarms": {}
+    })
+
+
+def test_real_flow_reader_opens_read_only_without_writing() -> None:
+    """RealFlowReader abre el puerto con DTR=False/RTS=False y nunca escribe (sin método write usado)."""
+    fake_serial = FakeFlowSerialPort(['{"flow_lpm": 3.33}'])
+    reader = RealFlowReader(port="COMX", serial_factory=lambda: fake_serial)
+    reader.start()
+
+    t0 = time.time()
+    while time.time() - t0 < 2.0 and reader.get_flow_lpm() is None:
+        time.sleep(0.02)
+
+    assert fake_serial.dtr is False
+    assert fake_serial.rts is False
+    assert reader.get_flow_lpm() == pytest.approx(3.33)
+    assert not hasattr(fake_serial, "write")  # el fake no define 'write': RealFlowReader nunca lo invoca
+
+    reader.stop()
+
+
+def test_real_flow_reader_ignores_non_json_lines() -> None:
+    """Líneas que no son JSON (ruido de arranque) se ignoran sin crashear ni alterar el último valor."""
+    fake_serial = FakeFlowSerialPort(['{"flow_lpm": 1.5}', "Arduino Uno Booting...", "{broken json:"])
+    reader = RealFlowReader(port="COMX", serial_factory=lambda: fake_serial)
+    reader.start()
+
+    t0 = time.time()
+    while time.time() - t0 < 2.0 and reader.get_flow_lpm() is None:
+        time.sleep(0.02)
+
+    assert reader.get_flow_lpm() == pytest.approx(1.5)
+    reader.stop()
+
+
+def test_flow_serial_replaces_simulated_flow_when_recent(fake_mqtt: FakeMqttClient) -> None:
+    """1. Con --flow-serial activo y lectura reciente, el flow real reemplaza al simulado en Influx."""
+    fake_serial = FakeFlowSerialPort(['{"flow_lpm": 3.33}'])
+    reader = RealFlowReader(port="COMX", serial_factory=lambda: fake_serial)
+    reader.start()
+
+    t0 = time.time()
+    while time.time() - t0 < 2.0 and reader.get_flow_lpm() is None:
+        time.sleep(0.02)
+
+    mock_influx = MagicMock()
+    mock_influx.write_line_protocol.return_value = True
+    b = TanquesBridge(influx_writer=mock_influx, mqtt_client=fake_mqtt, flow_reader=reader)
+
+    b.process_device_line(_telemetry_line(flow_lpm=9.99))
+
+    line_written = mock_influx.write_line_protocol.call_args[0][0]
+    assert "flow_lpm=3.33" in line_written
+
+    reader.stop()
+    b.stop()
+
+
+def test_flow_serial_stale_data_omits_field_and_warns_once(fake_mqtt: FakeMqttClient, caplog: pytest.LogCaptureFixture) -> None:
+    """2. Con dato real viejo (> 3 s) o ausente, el campo flow_lpm no se escribe y se avisa una sola vez."""
+    reader = RealFlowReader(port="COMX", max_age_s=3.0)
+    reader._last_value = 1.23
+    reader._last_time = time.time() - 10.0
+
+    mock_influx = MagicMock()
+    mock_influx.write_line_protocol.return_value = True
+    b = TanquesBridge(influx_writer=mock_influx, mqtt_client=fake_mqtt, flow_reader=reader)
+
+    with caplog.at_level(logging.WARNING, logger="edge-bridge"):
+        b.process_device_line(_telemetry_line(flow_lpm=9.99))
+        b.process_device_line(_telemetry_line(flow_lpm=9.99))
+
+    assert mock_influx.write_line_protocol.call_count == 2
+    for call in mock_influx.write_line_protocol.call_args_list:
+        assert "flow_lpm" not in call[0][0]
+
+    warnings = [r for r in caplog.records if "Caudal real" in r.message]
+    assert len(warnings) == 1  # Aviso único, no repetido en cada trama
+
+    b.stop()
+
+
+def test_without_flow_serial_option_nothing_changes(fake_mqtt: FakeMqttClient) -> None:
+    """3. Sin --flow-serial (flow_reader=None, default), el flow_lpm simulado se escribe sin alterar."""
+    mock_influx = MagicMock()
+    mock_influx.write_line_protocol.return_value = True
+    b = TanquesBridge(influx_writer=mock_influx, mqtt_client=fake_mqtt)
+
+    assert b.flow_reader is None
+    b.process_device_line(_telemetry_line(flow_lpm=9.99))
+
+    line_written = mock_influx.write_line_protocol.call_args[0][0]
+    assert "flow_lpm=9.99" in line_written
+
+    b.stop()
+
+
+def test_flow_serial_requires_sim_source(monkeypatch: pytest.MonkeyPatch) -> None:
+    """--flow-serial (o FLOW_SERIAL_PORT) solo es válido junto con --source sim; otra fuente aborta."""
+    import sys
+    from edge.bridge import main
+
+    monkeypatch.setattr(sys, "argv", ["bridge.py", "--source", "stdin", "--flow-serial", "COM4"])
+    with pytest.raises(SystemExit) as exc_info:
+        main()
+    assert exc_info.value.code == 1
