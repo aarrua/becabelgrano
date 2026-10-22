@@ -195,22 +195,21 @@ if ($SinCaudal) {
     $ArgsBridge = @("bridge.py", "--source", "sim", "--flow-serial", $PuertoCaudal, "--baudrate", "$BaudrateCaudal")
 }
 
-$ComandoBridge = "Set-Location -LiteralPath `"$EdgeDir`"; & `"$PythonExe`" $($ArgsBridge -join ' ')"
+$ComandoBridge = "Set-Location -LiteralPath '$EdgeDir'; & '$PythonExe' $($ArgsBridge -join ' ')"
 Write-Host "Abriendo el bridge en una ventana nueva..." -ForegroundColor Cyan
 Start-Process -FilePath "powershell.exe" -ArgumentList @("-NoExit", "-Command", $ComandoBridge)
 
 # ==============================================================================
 # 9. Backend Spring Boot en perfil prod en una ventana separada
 # ==============================================================================
-$ComandoBackend = "Set-Location -LiteralPath `"$BackendDir`"; mvn spring-boot:run `"-Dspring-boot.run.profiles=prod`""
+$ComandoBackend = "Set-Location -LiteralPath '$BackendDir'; mvn spring-boot:run '-Dspring-boot.run.profiles=prod'"
 Write-Host "Abriendo el backend (perfil prod) en una ventana nueva..." -ForegroundColor Cyan
 Start-Process -FilePath "powershell.exe" -ArgumentList @("-NoExit", "-Command", $ComandoBackend)
 
 Write-Host ""
 Write-Host "=== Demo iniciada ===" -ForegroundColor Green
-Write-Host "Frontend/Nginx : http://localhost/"
-Write-Host "Swagger        : http://localhost/api/swagger-ui.html"
-Write-Host "Grafana directo: http://localhost:3000"
+Write-Host "Web     : http://localhost/"
+Write-Host "Grafana : http://localhost/grafana"
 Write-Host "Bomba real: SIEMPRE MANUAL. El boton de la web solo controla la bomba simulada."
 if (-not $SinCaudal) {
     Write-Host "Caudal real: Arduino Uno conectado por USB en $PuertoCaudal (MODO_SIM_SIN_SENSORES 0)."
