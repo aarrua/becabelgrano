@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { AuthProvider } from './context/AuthContext'
 import { ProtectedRoute } from './components/ProtectedRoute'
 import { Navbar } from './components/Navbar'
+import { DemoBanner } from './components/DemoBanner'
 import { LoginView } from './views/LoginView'
 import { MonitorView } from './views/MonitorView'
 import { AuditView } from './views/AuditView'
@@ -30,6 +31,7 @@ export default function App() {
                 <ProtectedRoute>
                   <div className="app-layout">
                     <Navbar />
+                    <DemoBanner />
                     <main className="main-content">
                       <MonitorView />
                     </main>
@@ -44,6 +46,7 @@ export default function App() {
                 <ProtectedRoute requiredRole="DOCENTE">
                   <div className="app-layout">
                     <Navbar />
+                    <DemoBanner />
                     <main className="main-content">
                       <AuditView />
                     </main>

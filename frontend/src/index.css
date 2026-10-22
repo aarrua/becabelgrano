@@ -119,6 +119,16 @@ input, select, textarea {
   flex-wrap: wrap;
 }
 
+.demo-banner {
+  background-color: rgba(245, 158, 11, 0.12);
+  border-bottom: 1px solid rgba(245, 158, 11, 0.35);
+  color: var(--accent-amber);
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-align: center;
+  padding: 0.5rem 1rem;
+}
+
 .navbar-brand {
   display: flex;
   align-items: center;
